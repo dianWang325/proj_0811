@@ -1,0 +1,118 @@
+#!/usr/bin/env python3
+"""Submit exact-token long-context requests to a local vLLM server."""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from pathlib import Path
+
+from transformers import AutoTokenizer
+
+TEST_DIR = Path(__file__).resolve().parent
+MODEL_PATH = os.environ.get("CPP_MODEL_PATH", "/mnt/a800_weight/Qwen3-30B-A3B-W8A8")
+MODEL_NAME = os.environ.get("CPP_MODEL_NAME", "qwen3-30b-a3b-w8a8")
+PORT = int(os.environ.get("CPP_PORT", "18080"))
+MODE = os.environ.get("CPP_REQUEST_MODE", "both")
+TARGETS = [int(value) for value in os.environ.get("CPP_TOKEN_TARGETS", "10000,20000,40000").split(",")]
+TIMEOUT = int(os.environ.get("CPP_REQUEST_TIMEOUT", "1800"))
+BASE_URL = f"http://127.0.0.1:{PORT}"
+
+
+def request_json(path: str, payload: dict, timeout: int = TIMEOUT) -> dict:
+    request = urllib.request.Request(
+        BASE_URL + path,
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.load(response)
+
+
+def build_exact_prompt(tokenizer, target_tokens: int, unit_text: str) -> str:
+    unit_ids = tokenizer.encode(unit_text, add_special_tokens=False)
+    if len(unit_ids) != 1:
+        raise RuntimeError(f"Expected a one-token prompt unit, got {unit_ids}")
+    expected_ids = unit_ids * target_tokens
+    prompt = tokenizer.decode(expected_ids, skip_special_tokens=False)
+    actual_ids = tokenizer.encode(prompt, add_special_tokens=False)
+    if actual_ids != expected_ids:
+        raise RuntimeError(
+            f"Tokenizer round trip changed target={target_tokens} to actual={len(actual_ids)}"
+        )
+    return prompt
+
+
+def submit(prompt: str, target_tokens: int, phase: str) -> dict:
+    started = time.perf_counter()
+    result = request_json(
+        "/v1/completions",
+        {
+            "model": MODEL_NAME,
+            "prompt": prompt,
+            "temperature": 0,
+            "max_tokens": 1,
+        },
+    )
+    elapsed = time.perf_counter() - started
+    if not result.get("choices"):
+        raise RuntimeError(f"Completion response has no choices for {target_tokens} tokens")
+    actual_tokens = result.get("usage", {}).get("prompt_tokens")
+    if actual_tokens != target_tokens:
+        raise RuntimeError(
+            f"API token count mismatch: target={target_tokens}, actual={actual_tokens}"
+        )
+    record = {
+        "phase": phase,
+        "target_tokens": target_tokens,
+        "prompt_tokens": actual_tokens,
+        "elapsed_seconds": round(elapsed, 3),
+        "finish_reason": result["choices"][0].get("finish_reason"),
+    }
+    print(json.dumps(record, ensure_ascii=False), flush=True)
+    return record
+
+
+def main() -> None:
+    if MODE not in {"sequential", "concurrent", "both"}:
+        raise ValueError("CPP_REQUEST_MODE must be sequential, concurrent, or both")
+    if TARGETS != sorted(TARGETS) or any(target <= 0 for target in TARGETS):
+        raise ValueError("CPP_TOKEN_TARGETS must be positive and ascending")
+
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH, local_files_only=True)
+    prompt_units = (" hello", " world", " test")
+    if len(TARGETS) > len(prompt_units):
+        raise ValueError(f"At most {len(prompt_units)} token targets are supported")
+    prompts = {
+        target: build_exact_prompt(tokenizer, target, unit)
+        for target, unit in zip(TARGETS, prompt_units, strict=True)
+    }
+    records: list[dict] = []
+
+    if MODE in {"sequential", "both"}:
+        for target in TARGETS:
+            records.append(submit(prompts[target], target, "sequential"))
+
+    if MODE in {"concurrent", "both"}:
+        with ThreadPoolExecutor(max_workers=len(TARGETS)) as executor:
+            futures = {
+                executor.submit(submit, prompts[target], target, "concurrent"): target
+                for target in TARGETS
+            }
+            for future in as_completed(futures):
+                records.append(future.result())
+
+    output_path = TEST_DIR / "cpp_long_context_result.json"
+    output_path.write_text(
+        json.dumps(records, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    print(f"CPP_LONG_CONTEXT_PASS mode={MODE} result={output_path}")
+
+
+if __name__ == "__main__":
+    main()

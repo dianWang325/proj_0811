@@ -4,5 +4,9 @@
 /smoke_test/serve.log
 /smoke_test/serve.pid
 /smoke_test/smoke_result.json
+/smoke_test/cpp_long_context_result.json
+/smoke_test/serve_*.log
+/smoke_test/serve_cpp_functional.pid
 /smoke_test/__pycache__/
+*.log
 *.py[cod]
