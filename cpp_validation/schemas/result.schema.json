@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CPP functional result",
+  "type": "object",
+  "required": ["schema_version", "suite", "passed"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "suite": {"type": "string"},
+    "passed": {"type": "boolean"},
+    "trace_event_count": {"type": "integer", "minimum": 0},
+    "scheduler_iteration_count": {"type": "integer", "minimum": 0},
+    "scheduled_chunk_sizes": {"type": "array", "items": {"type": "integer"}}
+  }
+}

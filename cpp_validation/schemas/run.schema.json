@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CPP validation run metadata",
+  "type": "object",
+  "required": ["schema_version", "run_id", "suite", "started_at", "host", "model_path", "npu_devices"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "minLength": 1},
+    "suite": {"type": "string", "minLength": 1},
+    "started_at": {"type": "string", "format": "date-time"},
+    "host": {"type": "string", "minLength": 1},
+    "model_path": {"type": "string", "minLength": 1},
+    "npu_devices": {"type": "array", "minItems": 2, "items": {"type": "integer"}}
+  }
+}

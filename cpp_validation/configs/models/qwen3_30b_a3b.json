@@ -1,0 +1,6 @@
+{
+  "model_path": "/mnt/a800_weight/Qwen3-30B-A3B-W8A8",
+  "served_model_name": "qwen3-30b-a3b-w8a8",
+  "max_model_len": 49152,
+  "pipeline_parallel_size": 2
+}

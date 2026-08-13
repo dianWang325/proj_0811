@@ -1,0 +1,7 @@
+# runner  dynamic  execution_mode
+mrv1 0 eager
+mrv1 1 eager
+mrv2 0 eager
+mrv2 1 eager
+mrv1 1 graph
+mrv2 1 graph

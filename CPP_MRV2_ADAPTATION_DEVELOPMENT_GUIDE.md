@@ -6,7 +6,8 @@
 
 - 功能代码：`/home/w00985415/proj_0811/deps/vllm-ascend`
 - 开发分支：`feat/modelrunner-v2-cpp-adaptation`
-- 功能验证工具：`/home/w00985415/proj_0811/smoke_test`
+- CPP 验证工具：`/home/w00985415/proj_0811/cpp_validation`
+- CPP 运行产物：`/home/w00985415/proj_0811/artifacts/cpp`
 
 文中行号以本文生成时的当前工作区为准；代码继续修改后应同步更新。
 
@@ -115,11 +116,12 @@ pytest -q \
 
 | 文件 | 简洁说明 |
 |---|---|
-| `smoke_test/cpp_long_context_test.py` | 使用本地 tokenizer 构造并校验 10K/20K/40K 输入，支持顺序、并发或两者组合请求。 |
-| `smoke_test/validate_cpp_trace.py` | 解析 `[CPP_TRACE]`，自动检查启动调用链、execution mode、动态 chunk 和在线校准生命周期。 |
-| `smoke_test/run_cpp_functional_case.sh` | 统一启动并验收单个 MRv1/MRv2、Static/Dynamic、Eager/Graph-enabled 功能组合。 |
-| `smoke_test/run_cpp_regression_matrix.sh` | 编排六组功能回归矩阵。 |
-| `smoke_test/run_mrv2_cpp_smoke.sh` | MRv2 Dynamic CPP 冒烟验证的快捷入口。 |
+| `cpp_validation/workloads/functional/long_context.py` | 使用本地 tokenizer 构造并校验 10K/20K/40K 输入，支持顺序、并发或两者组合请求。 |
+| `cpp_validation/validators/functional/cpp_trace.py` | 解析 `[CPP_TRACE]`，自动检查启动调用链、execution mode、动态 chunk 和在线校准生命周期，并写入结构化结果。 |
+| `cpp_validation/scripts/run_case.sh` | 统一启动并验收单个 MRv1/MRv2、Static/Dynamic、Eager/Graph-enabled 功能组合。 |
+| `cpp_validation/scripts/run_matrix.sh` | 编排配置文件中定义的功能回归矩阵。 |
+| `cpp_validation/scripts/run_quick.sh` | MRv2 Dynamic CPP 冒烟验证的快捷入口。 |
+| `cpp_validation/bin/cpp-test` | CPP 快速、单用例、矩阵和报告生成的统一命令入口。 |
 
 ### 4.4 关键修改文件（非新增文件）
 
@@ -142,4 +144,4 @@ pytest -q \
 4. `history_predictor_updated` 证明正式请求的实测数据被用于在线更新 Predictor。
 5. `online_calibration_completed` 和 `worker_profiling_timing_disabled` 依次证明校准结束及 Worker 真正停止计时。
 
-上述链路同时由单元测试验证控制流和字段语义，由 `smoke_test` 验证真实服务、多进程和 NPU 执行结果；两类测试互补，不能互相替代。
+上述链路同时由单元测试验证控制流和字段语义，由 `cpp_validation` 验证真实服务、多进程和 NPU 执行结果；两类测试互补，不能互相替代。

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+readonly CPP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+usage() {
+    cat <<'EOF'
+Usage: cpp-test <quick|case|matrix|summarize> [arguments]
+
+  quick       Run the MRv2 dynamic functional smoke case.
+  case        Run one case configured through CPP_* environment variables.
+  matrix      Run the configured functional compatibility matrix.
+  summarize   Rebuild reports for a run directory.
+EOF
+}
+
+command="${1:-}"
+[[ -n "${command}" ]] || { usage >&2; exit 2; }
+shift
+
+case "${command}" in
+    quick) exec "${CPP_ROOT}/scripts/run_quick.sh" "$@" ;;
+    case) exec "${CPP_ROOT}/scripts/run_case.sh" "$@" ;;
+    matrix) exec "${CPP_ROOT}/scripts/run_matrix.sh" "$@" ;;
+    summarize) exec python3 "${CPP_ROOT}/analysis/summarize_run.py" "$@" ;;
+    -h|--help|help) usage ;;
+    *) echo "Unknown command: ${command}" >&2; usage >&2; exit 2 ;;
+esac

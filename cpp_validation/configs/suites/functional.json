@@ -1,0 +1,8 @@
+{
+  "suite": "functional",
+  "request_mode": "both",
+  "token_targets": [10000, 20000, 40000],
+  "max_output_tokens": 1,
+  "max_num_batched_tokens": 4096,
+  "max_num_seqs": 8
+}
