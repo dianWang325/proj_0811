@@ -119,7 +119,10 @@ cpp_initialize_performance_case() {
         "${REQUEST_RATE}" "${MAX_OUTPUT_TOKENS}" "${DATA_GENERATOR}" \
         "${MANUAL_WARMUP_ENABLED}" "${MANUAL_WARMUP_INPUT_TOKENS}" \
         "${MANUAL_WARMUP_OUTPUT_TOKENS}" "${MANUAL_WARMUP_COUNT}" \
-        "${MANUAL_WARMUP_CONCURRENCY}" "${MANUAL_WARMUP_REQUEST_RATE}" <<'PY'
+        "${MANUAL_WARMUP_CONCURRENCY}" "${MANUAL_WARMUP_REQUEST_RATE}" \
+        "${PREFIX_CACHE_ENABLED}" "${PREFIX_REPEAT_RATE}" "${PREFIX_TEST}" \
+        "${CPP_SMOOTH_FACTOR}" "${CPP_CALIBRATION_SAME_DISTRIBUTION_FIRST}" \
+        "${POST_MANUAL_REWARM_COUNT}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -131,6 +134,8 @@ from pathlib import Path
     request_rate, max_output_tokens, data_generator, manual_warmup_enabled,
     manual_warmup_input_tokens, manual_warmup_output_tokens,
     manual_warmup_count, manual_warmup_concurrency, manual_warmup_request_rate,
+    prefix_cache_enabled, prefix_repeat_rate, prefix_test, smooth_factor,
+    calibration_same_distribution_first, post_manual_rewarm_count,
 ) = sys.argv[1:]
 data = {
     "schema_version": 1,
@@ -166,7 +171,18 @@ data = {
         "concurrency": int(manual_warmup_concurrency),
         "request_rate": float(manual_warmup_request_rate),
     },
-    "prefix_cache_enabled": False,
+    "prefix_cache": {
+        "enabled": prefix_cache_enabled == "1",
+        "repeat_rate": prefix_repeat_rate or None,
+        "prefix_test": prefix_test == "1",
+    },
+    "cpp_tuning": {
+        "smooth_factor": float(smooth_factor),
+        "online_calibration_same_distribution_first": (
+            calibration_same_distribution_first == "1"
+        ),
+        "post_manual_rewarm_count": int(post_manual_rewarm_count),
+    },
 }
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY

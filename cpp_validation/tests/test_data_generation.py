@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 from cpp_validation.workloads import data_generation
@@ -85,6 +86,33 @@ def test_script_backend_remains_available(monkeypatch):
     assert len(records) == 2
     assert metadata["backend"] == "script"
     assert metadata["aisbench_auto_tools_revision"] is None
+
+
+def test_high_prefix_hit_preserves_variable_lengths(monkeypatch):
+    class FakeTokenizer:
+        def encode(self, text, add_special_tokens=False):
+            return list(text)
+
+        def decode(self, token_ids, skip_special_tokens=False):
+            return "".join(token_ids)
+
+    fake_transformers = SimpleNamespace(
+        AutoTokenizer=SimpleNamespace(from_pretrained=lambda *args, **kwargs: FakeTokenizer())
+    )
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+
+    prompts, prefix_lengths = data_generation.apply_shared_prefix(
+        "/model", ["a" * 10, "b" * 20, "c" * 30], [10, 20, 30], 0.9
+    )
+    actual_prefix_lengths = data_generation.validate_shared_prefixes(
+        "/model", prompts, prefix_lengths
+    )
+
+    assert [len(prompt) for prompt in prompts] == [10, 20, 30]
+    assert prefix_lengths == [9, 18, 27]
+    assert actual_prefix_lengths == prefix_lengths
+    assert prompts[0][:9] == prompts[1][:9] == prompts[2][:9]
+    assert data_generation.parse_prefix_repeat_rate("90%") == 0.9
 
 
 def test_generated_jsonl_loader_checks_required_fields(tmp_path):

@@ -100,24 +100,36 @@ CPP_NPU_DEVICES=8,9,10,11,12,13,14,15 \
 ./proj_0811/cpp_validation/bin/cpp-test perf-matrix
 ```
 
-The fixed dataset contains 64 requests of exactly 131072 input tokens. The
-variable dataset contains 64 requests spanning 4096 to 65536 tokens with an
-exact mean of 32768. Both use concurrency 12, request rate 0, and generate one
-output token. The length/count/output contracts are unchanged; only request
-injection pressure is increased. After the service becomes healthy, every
-performance case first
-runs the following independent AISBench manual warmup (five requests, excluded
-from performance metrics):
+The fixed dataset contains 5 requests of exactly 131072 input tokens at
+concurrency 1 and uses `max_num_batched_tokens=32768`. The variable dataset
+contains 64 requests spanning 4096 to 65536 tokens with an exact mean of 32768
+at concurrency 4 and uses `max_num_batched_tokens=20480`. Both use request
+rate 0 and generate one output token. Variable prompts share a deterministic,
+nested 90% token prefix generated from the selected backend; prefix caching is
+enabled only for that dataset. Generation metadata records and validates the
+planned prefix-hit ratio.
+
+After the service becomes healthy, the fixed AISBench hardware warmup remains
+five requests and is excluded from performance metrics:
 
 ```bash
 python3 aisbench_test.py --input_len 131072 --output_len 1 --data_num 5 --concurrency 1 --request_rate 0
 ```
 
-It then performs the existing 30 untimed same-distribution calibration
-requests before AISBench starts its measured interval. Override the manual
-stage with `CPP_MANUAL_WARMUP_*`, or disable it explicitly with
+For CPP-enabled cases, 30 untimed requests from the target dataset now run
+before the fixed manual warmup, so the bounded online timing history is fitted
+to the measured distribution instead of being consumed by 128K-only traffic.
+Five same-distribution requests are sent again after the manual warmup to
+restore the variable prefix-cache state, followed by one untimed request for
+the longest shared prefix (the `--prefix_test` equivalent). Static cases keep the conventional
+manual-warmup then 30-request warmup order. CPP uses `smooth_factor=0.8`.
+Override the manual stage with `CPP_MANUAL_WARMUP_*`, or disable it explicitly with
 `CPP_MANUAL_WARMUP_ENABLED=0` for diagnostic comparisons. The normal matrix
 keeps it enabled.
+
+The pre-tuning configuration is preserved in
+`configs/snapshots/performance_pre_tuning_20260817.json`; do not overwrite this
+file when tuning later runs.
 
 The matrix includes both `mrv2_cpp0_eager` and `mrv2_cpp1_eager` for the
 fixed and variable datasets. Reports compare these pairs directly as

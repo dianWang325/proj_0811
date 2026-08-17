@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import subprocess
 from pathlib import Path
 
 from cpp_validation.analysis.summarize_performance import (
@@ -11,7 +12,9 @@ from cpp_validation.analysis.summarize_performance import (
 from cpp_validation.validators.performance.result import validate_case
 from cpp_validation.workloads.performance.dataset import (
     FIXED_INPUT_TOKENS,
+    FIXED_REQUEST_COUNT,
     REQUEST_COUNT,
+    VARIABLE_REQUEST_COUNT,
     VARIABLE_MAX_TOKENS,
     VARIABLE_MEAN_TOKENS,
     VARIABLE_MIN_TOKENS,
@@ -68,16 +71,60 @@ def test_performance_load_uses_requested_pressure_without_changing_lengths():
         ).read_text(encoding="utf-8")
     )
 
-    assert suite["request_count"] == 64
     assert suite["max_output_tokens"] == 1
+    assert suite["cpp"]["smooth_factor"] == 0.8
+    assert suite["cpp"]["online_calibration"] == {
+        "same_distribution_first": True,
+        "post_manual_rewarm_count": 5,
+    }
     assert suite["fixed"]["input_tokens"] == 131072
-    assert suite["fixed"]["concurrency"] == 12
+    assert suite["fixed"]["request_count"] == 5
+    assert suite["fixed"]["concurrency"] == 1
     assert suite["fixed"]["request_rate"] == 0
+    assert suite["fixed"]["max_num_batched_tokens"] == 32768
+    assert suite["fixed"]["prefix_cache"]["enabled"] is False
     assert suite["variable"]["min_input_tokens"] == 4096
     assert suite["variable"]["max_input_tokens"] == 65536
     assert suite["variable"]["mean_input_tokens"] == 32768
-    assert suite["variable"]["concurrency"] == 12
+    assert suite["variable"]["request_count"] == 64
+    assert suite["variable"]["concurrency"] == 4
     assert suite["variable"]["request_rate"] == 0
+    assert suite["variable"]["max_num_batched_tokens"] == 20480
+    assert suite["variable"]["prefix_cache"] == {
+        "enabled": True,
+        "dataset_type": "prefix_cache",
+        "repeat_rate": "90%",
+        "prefix_test": True,
+    }
+
+
+def test_shell_loader_exposes_dataset_specific_tuning():
+    common = PROJECT_ROOT / "cpp_validation" / "scripts" / "lib" / "common.sh"
+    loader = PROJECT_ROOT / "cpp_validation" / "scripts" / "lib" / "config.sh"
+    model = (
+        PROJECT_ROOT
+        / "cpp_validation"
+        / "configs"
+        / "models"
+        / "deepseek_v4_flash.json"
+    )
+    suite = (
+        PROJECT_ROOT / "cpp_validation" / "configs" / "suites" / "performance.json"
+    )
+    command = (
+        f"source {common}; source {loader}; "
+        f"cpp_load_performance_config_defaults {model} {suite}; "
+        "printf '%s\\n' \"${CPP_PERF_SUITE_DEFAULTS[@]}\""
+    )
+    completed = subprocess.run(
+        ["bash", "-c", command], check=True, capture_output=True, text=True
+    )
+    values = completed.stdout.splitlines()
+
+    assert len(values) == 29
+    assert values[3:7] == ["5", "1", "0", "32768"]
+    assert values[10:14] == ["64", "4", "0", "20480"]
+    assert values[22:] == ["0.8", "1", "5", "0", "1", "90%", "1"]
 
 
 def test_summary_compares_mrv2_cpp_on_with_same_runner_cpp_off():
@@ -138,7 +185,7 @@ def test_summary_never_compares_different_data_generators():
 def test_variable_dataset_contract():
     lengths = variable_input_lengths()
 
-    assert len(lengths) == REQUEST_COUNT
+    assert len(lengths) == VARIABLE_REQUEST_COUNT == REQUEST_COUNT
     assert min(lengths) == VARIABLE_MIN_TOKENS
     assert max(lengths) == VARIABLE_MAX_TOKENS
     assert sum(lengths) / len(lengths) == VARIABLE_MEAN_TOKENS
@@ -148,20 +195,22 @@ def test_variable_dataset_contract():
 def test_fixed_dataset_contract():
     lengths = performance_input_lengths("fixed")
 
-    assert lengths == [FIXED_INPUT_TOKENS] * REQUEST_COUNT
+    assert lengths == [FIXED_INPUT_TOKENS] * FIXED_REQUEST_COUNT
 
 
 def _write_aisbench_result(root, dataset="fixed"):
     output = root / "performances" / "cpp-vllm-api"
     output.mkdir(parents=True)
     lengths = performance_input_lengths(dataset)
+    request_count = len(lengths)
+    benchmark_duration_ms = sum(lengths) / 800 * 1000
     common = {
-        "Benchmark Duration": {"Total": "10485760 ms"},
+        "Benchmark Duration": {"Total": f"{benchmark_duration_ms} ms"},
         "Input Token Throughput": {"Total": "800 token/s"},
-        "Success Requests": {"Total": 64},
+        "Success Requests": {"Total": request_count},
         "Failed Requests": {"Total": 0},
         "Total Input Tokens": {"Total": sum(lengths)},
-        "Total Generated Tokens": {"Total": 64},
+        "Total Generated Tokens": {"Total": request_count},
     }
     (output / f"cpp_{dataset}.json").write_text(json.dumps(common), encoding="utf-8")
     with (output / f"cpp_{dataset}.csv").open("w", newline="", encoding="utf-8") as handle:
@@ -193,7 +242,7 @@ def _write_aisbench_result(root, dataset="fixed"):
                 "130 ms",
                 "140 ms",
                 "",
-                64,
+                request_count,
             ]
         )
 
@@ -281,7 +330,7 @@ def test_graph_case_validates_eager_profile_and_graph_probe(tmp_path):
     assert result["ttft_p50_ms"] == 120
     assert result["ttft_p90_ms"] == 130
     assert result["ttft_p95_ms"] == 140
-    assert result["measurement_wall_time_seconds"] == 10485.76
+    assert result["measurement_wall_time_seconds"] == 819.2
     assert result["input_throughput_tokens_per_second"] == 800
     assert result["input_throughput_per_card_tokens_per_second"] == 100
     assert result["configured_cudagraph_mode"] == "FULL_DECODE_ONLY"
@@ -343,3 +392,78 @@ def test_graph_case_rejects_silent_eager_fallback(tmp_path):
     assert errors
     assert result["passed"] is False
     assert result["cpp_graph_isolation_pass"] is False
+
+
+def test_variable_case_requires_and_records_prefix_prime(tmp_path):
+    aisbench = tmp_path / "aisbench"
+    _write_aisbench_result(aisbench, dataset="variable")
+    server_log = tmp_path / "server.log"
+    server_log.write_text("", encoding="utf-8")
+    lengths = performance_input_lengths("variable")
+    prefix_lengths = [round(length * 0.9) for length in lengths]
+    cacheable_prefix_lengths = [length // 32 * 32 for length in prefix_lengths]
+    dataset_metadata = tmp_path / "dataset.json"
+    dataset_metadata.write_text(
+        json.dumps(
+            {
+                "backend": "aisbench",
+                "input_token_lengths": lengths,
+                "prefix_cache": {
+                    "enabled": True,
+                    "prefix_test": True,
+                    "mean_planned_prefix_hit_ratio": sum(
+                        prefix / length
+                        for prefix, length in zip(prefix_lengths, lengths, strict=True)
+                    )
+                    / len(lengths),
+                    "mean_cacheable_prefix_hit_ratio": sum(
+                        prefix / length
+                        for prefix, length in zip(
+                            cacheable_prefix_lengths, lengths, strict=True
+                        )
+                    )
+                    / len(lengths),
+                    "planned_prefix_token_lengths": prefix_lengths,
+                    "cacheable_prefix_token_lengths": cacheable_prefix_lengths,
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    prefix_prime = tmp_path / "prefix_prime.json"
+    prefix_prime.write_text(
+        json.dumps(
+            {
+                "mode": "prefix-prime",
+                "request_count": 1,
+                "expected_prefix_tokens": max(cacheable_prefix_lengths),
+                "records": [
+                    {
+                        "prompt_tokens": max(cacheable_prefix_lengths),
+                        "completion_tokens": 1,
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result, errors = validate_case(
+        aisbench_root=aisbench,
+        server_log=server_log,
+        dataset="variable",
+        runner="mrv2",
+        dynamic=False,
+        execution_mode="eager",
+        pp_size=2,
+        tp_size=4,
+        graph_probe=None,
+        data_generator="aisbench",
+        dataset_metadata=dataset_metadata,
+        prefix_prime=prefix_prime,
+    )
+
+    assert not errors
+    assert result["prefix_prime"]["expected_prefix_tokens"] == max(
+        cacheable_prefix_lengths
+    )

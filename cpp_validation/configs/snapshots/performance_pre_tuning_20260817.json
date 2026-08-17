@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "snapshot_id": "performance_pre_tuning_20260817",
+  "captured_at": "2026-08-17",
+  "purpose": "Traceable snapshot taken before concurrency, prefix-hit, CPP smoothing, token-budget, request-count, and calibration-order tuning.",
+  "source": {
+    "repository": "/home/w00985415/proj_0811",
+    "container": "wd_test0811",
+    "server": "server-14",
+    "branch": "main",
+    "revision": "4a556e85b12fd0ce4da8dd9cb450e05853b7eb7f",
+    "suite_config_path": "cpp_validation/configs/suites/performance.json"
+  },
+  "suite_config": {
+    "suite": "performance",
+    "data_generator": "aisbench",
+    "request_count": 64,
+    "warmup_count": 30,
+    "max_output_tokens": 1,
+    "max_num_batched_tokens": 24576,
+    "manual_warmup": {
+      "enabled": true,
+      "input_tokens": 131072,
+      "output_tokens": 1,
+      "request_count": 5,
+      "concurrency": 1,
+      "request_rate": 0
+    },
+    "fixed": {
+      "input_tokens": 131072,
+      "concurrency": 12,
+      "request_rate": 0
+    },
+    "variable": {
+      "min_input_tokens": 4096,
+      "max_input_tokens": 65536,
+      "mean_input_tokens": 32768,
+      "concurrency": 12,
+      "request_rate": 0,
+      "seed": 811
+    }
+  },
+  "effective_server_config": {
+    "max_model_len": 132000,
+    "pipeline_parallel_size": 2,
+    "tensor_parallel_size": 4,
+    "gpu_memory_utilization": 0.9,
+    "enable_chunked_prefill": true,
+    "enable_prefix_caching": false,
+    "async_scheduling": false,
+    "cpp_dynamic": {
+      "profiling_chunk_config": {
+        "enabled": true,
+        "need_timing": true,
+        "execution_mode_trace_enabled": true,
+        "smooth_factor": 1.0
+      }
+    }
+  },
+  "workflow_order": [
+    "start_service",
+    "fixed_131072_token_manual_warmup",
+    "same_dataset_warmup_or_cpp_online_calibration",
+    "formal_benchmark"
+  ],
+  "known_calibration_risk": "For CPP-enabled variable-length cases, the fixed 128K manual warmup runs before same-distribution warmup and can consume the bounded online timing sample budget, preventing adaptation to the formal variable-length distribution."
+}

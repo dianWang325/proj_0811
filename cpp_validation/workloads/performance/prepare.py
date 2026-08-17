@@ -125,7 +125,9 @@ def run_requests(
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--mode", choices=("warmup", "graph-probe"), required=True)
+    parser.add_argument(
+        "--mode", choices=("warmup", "prefix-prime", "graph-probe"), required=True
+    )
     parser.add_argument("--dataset", choices=("fixed", "variable"), required=True)
     parser.add_argument("--model-path", required=True)
     parser.add_argument("--model-name", required=True)
@@ -135,9 +137,11 @@ def main() -> int:
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--server-log", type=Path)
     parser.add_argument("--dataset-path", type=Path)
+    parser.add_argument("--dataset-metadata", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
+    prefix_tokens = None
     if args.mode == "graph-probe":
         if args.server_log is None or not args.server_log.is_file():
             parser.error("graph-probe mode requires a readable --server-log")
@@ -145,6 +149,34 @@ def main() -> int:
         samples = [(factory.build(128), 128)]
         concurrency = 1
         output_tokens = 2
+    elif args.mode == "prefix-prime":
+        if args.dataset_path is None or args.dataset_metadata is None:
+            parser.error("prefix-prime requires dataset and metadata paths")
+        generated = load_generated_records(args.dataset_path)
+        metadata = json.loads(args.dataset_metadata.read_text(encoding="utf-8"))
+        prefix_config = metadata.get("prefix_cache", {})
+        prefix_lengths = prefix_config.get("cacheable_prefix_token_lengths") or \
+            prefix_config.get("planned_prefix_token_lengths")
+        if not prefix_lengths or len(prefix_lengths) != len(generated):
+            parser.error("prefix-prime metadata has no valid prefix length plan")
+        index = max(range(len(prefix_lengths)), key=prefix_lengths.__getitem__)
+        prefix_tokens = int(prefix_lengths[index])
+        from transformers import AutoTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(
+            args.model_path, local_files_only=True, trust_remote_code=True
+        )
+        full_ids = tokenizer.encode(
+            generated[index]["question"], add_special_tokens=False
+        )
+        expected_ids = full_ids[:prefix_tokens]
+        prompt = tokenizer.decode(expected_ids, skip_special_tokens=False)
+        actual_ids = tokenizer.encode(prompt, add_special_tokens=False)
+        if actual_ids != expected_ids:
+            raise RuntimeError("prefix-prime tokenizer round trip changed the prefix")
+        samples = [(prompt, prefix_tokens)]
+        concurrency = 1
+        output_tokens = 1
     else:
         if args.count <= 0:
             parser.error("--count must be positive")
@@ -187,6 +219,8 @@ def main() -> int:
         "expected_output_tokens": output_tokens,
         "records": records,
     }
+    if args.mode == "prefix-prime":
+        result["expected_prefix_tokens"] = prefix_tokens
     if args.mode == "graph-probe":
         trace_events = read_trace_events_since(args.server_log, server_log_offset)
         probe_execution_events = [

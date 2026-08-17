@@ -120,6 +120,7 @@ def validate_case(
     data_generator: str = "script",
     dataset_metadata: Path | None = None,
     manual_warmup: Path | None = None,
+    prefix_prime: Path | None = None,
 ) -> tuple[dict, list[str]]:
     errors = []
     metrics = load_aisbench_metrics(aisbench_root, dataset)
@@ -141,6 +142,28 @@ def validate_case(
                 )
             if generation_metadata.get("input_token_lengths") != expected_lengths:
                 errors.append("generated input token lengths violate the suite contract")
+            prefix_metadata = generation_metadata.get("prefix_cache", {})
+            expected_prefix_cache = dataset == "variable"
+            if prefix_metadata.get("enabled") is not expected_prefix_cache:
+                errors.append(
+                    "generated prefix-cache mode violates the suite contract: "
+                    f"expected={expected_prefix_cache}, "
+                    f"actual={prefix_metadata.get('enabled')}"
+                )
+            if expected_prefix_cache:
+                if abs(
+                    float(prefix_metadata.get("mean_planned_prefix_hit_ratio", 0.0))
+                    - 0.9
+                ) > 1e-4:
+                    errors.append("variable dataset planned prefix-hit ratio is not 90%")
+                if float(
+                    prefix_metadata.get("mean_cacheable_prefix_hit_ratio", 0.0)
+                ) < 0.89:
+                    errors.append(
+                        "variable dataset cacheable prefix-hit ratio is below 89%"
+                    )
+                if prefix_metadata.get("prefix_test") is not True:
+                    errors.append("variable dataset prefix-test warmup is not enabled")
     manual_warmup_metadata = None
     if manual_warmup is not None:
         if not manual_warmup.is_file():
@@ -151,6 +174,32 @@ def validate_case(
             )
             if manual_warmup_metadata.get("exit_code") != 0:
                 errors.append("AISBench manual warmup did not complete successfully")
+    prefix_prime_metadata = None
+    prefix_config = (
+        generation_metadata.get("prefix_cache", {})
+        if generation_metadata is not None
+        else {}
+    )
+    if prefix_config.get("prefix_test") is True:
+        if prefix_prime is None or not prefix_prime.is_file():
+            errors.append("prefix-prime result is missing")
+        else:
+            prefix_prime_metadata = json.loads(
+                prefix_prime.read_text(encoding="utf-8")
+            )
+            cacheable = prefix_config.get("cacheable_prefix_token_lengths") or \
+                prefix_config.get("planned_prefix_token_lengths") or []
+            expected_prefix_tokens = max(cacheable) if cacheable else None
+            records = prefix_prime_metadata.get("records") or [{}]
+            if not (
+                prefix_prime_metadata.get("mode") == "prefix-prime"
+                and prefix_prime_metadata.get("request_count") == 1
+                and prefix_prime_metadata.get("expected_prefix_tokens")
+                == expected_prefix_tokens
+                and records[0].get("prompt_tokens") == expected_prefix_tokens
+                and records[0].get("completion_tokens") == 1
+            ):
+                errors.append("prefix-prime request did not match the shared prefix plan")
 
     reported_throughput = metrics[
         "aisbench_reported_input_throughput_tokens_per_second"
@@ -295,7 +344,13 @@ def validate_case(
         "execution_mode": execution_mode,
         "data_generator": data_generator,
         "dataset_generation_metadata": generation_metadata,
+        "prefix_cache": (
+            generation_metadata.get("prefix_cache")
+            if generation_metadata is not None
+            else None
+        ),
         "manual_warmup": manual_warmup_metadata,
+        "prefix_prime": prefix_prime_metadata,
         **metrics,
         "input_throughput_per_card_tokens_per_second": round(
             metrics["input_throughput_tokens_per_second"] / device_count, 4
@@ -334,6 +389,7 @@ def main() -> int:
     parser.add_argument("--data-generator", choices=("aisbench", "script"), default="script")
     parser.add_argument("--dataset-metadata", type=Path)
     parser.add_argument("--manual-warmup", type=Path)
+    parser.add_argument("--prefix-prime", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
@@ -350,6 +406,7 @@ def main() -> int:
         data_generator=args.data_generator,
         dataset_metadata=args.dataset_metadata,
         manual_warmup=args.manual_warmup,
+        prefix_prime=args.prefix_prime,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

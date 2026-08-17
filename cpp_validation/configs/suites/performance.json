@@ -1,10 +1,15 @@
 {
   "suite": "performance",
   "data_generator": "aisbench",
-  "request_count": 64,
   "warmup_count": 30,
   "max_output_tokens": 1,
-  "max_num_batched_tokens": 24576,
+  "cpp": {
+    "smooth_factor": 0.8,
+    "online_calibration": {
+      "same_distribution_first": true,
+      "post_manual_rewarm_count": 5
+    }
+  },
   "manual_warmup": {
     "enabled": true,
     "input_tokens": 131072,
@@ -15,15 +20,28 @@
   },
   "fixed": {
     "input_tokens": 131072,
-    "concurrency": 12,
-    "request_rate": 0
+    "request_count": 5,
+    "concurrency": 1,
+    "request_rate": 0,
+    "max_num_batched_tokens": 32768,
+    "prefix_cache": {
+      "enabled": false
+    }
   },
   "variable": {
     "min_input_tokens": 4096,
     "max_input_tokens": 65536,
     "mean_input_tokens": 32768,
-    "concurrency": 12,
+    "request_count": 64,
+    "concurrency": 4,
     "request_rate": 0,
-    "seed": 811
+    "max_num_batched_tokens": 20480,
+    "seed": 811,
+    "prefix_cache": {
+      "enabled": true,
+      "dataset_type": "prefix_cache",
+      "repeat_rate": "90%",
+      "prefix_test": true
+    }
   }
 }

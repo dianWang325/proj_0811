@@ -11,7 +11,11 @@ from ais_bench.benchmark.registry import LOAD_DATASET
 from datasets import Dataset
 from transformers import AutoTokenizer
 
-REQUEST_COUNT = 64
+FIXED_REQUEST_COUNT = 5
+VARIABLE_REQUEST_COUNT = 64
+# Kept as the variable-dataset count for callers that imported the original
+# single-count constant. New code should use the dataset-specific constants.
+REQUEST_COUNT = VARIABLE_REQUEST_COUNT
 FIXED_INPUT_TOKENS = 131072
 VARIABLE_MIN_TOKENS = 4096
 VARIABLE_MAX_TOKENS = 65536
@@ -33,16 +37,16 @@ def variable_input_lengths(seed: int = VARIABLE_SEED) -> list[int]:
         lengths.append(VARIABLE_MIN_TOKENS)
 
     random.Random(seed).shuffle(lengths)
-    assert len(lengths) == REQUEST_COUNT
+    assert len(lengths) == VARIABLE_REQUEST_COUNT
     assert min(lengths) == VARIABLE_MIN_TOKENS
     assert max(lengths) == VARIABLE_MAX_TOKENS
-    assert sum(lengths) == REQUEST_COUNT * VARIABLE_MEAN_TOKENS
+    assert sum(lengths) == VARIABLE_REQUEST_COUNT * VARIABLE_MEAN_TOKENS
     return lengths
 
 
 def performance_input_lengths(dataset_name: str) -> list[int]:
     if dataset_name == "fixed":
-        return [FIXED_INPUT_TOKENS] * REQUEST_COUNT
+        return [FIXED_INPUT_TOKENS] * FIXED_REQUEST_COUNT
     if dataset_name == "variable":
         return variable_input_lengths()
     raise ValueError(f"unsupported CPP performance dataset: {dataset_name}")

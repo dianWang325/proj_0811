@@ -28,10 +28,13 @@ cpp_perf_start_server() {
     local log_file="$1" compiler_dir="$2" runner_v2=0
     local additional_config='{"enable_cpu_binding":false}'
     local -a execution_args=(--enforce-eager)
+    local -a prefix_cache_args=(--no-enable-prefix-caching)
     [[ "${RUNNER}" == "mrv2" ]] && runner_v2=1
     if [[ "${DYNAMIC}" == 1 ]]; then
-        additional_config='{"enable_cpu_binding":false,"scheduler_config":{"profiling_chunk_config":{"enabled":true,"need_timing":true,"execution_mode_trace_enabled":true}}}'
+        additional_config="{\"enable_cpu_binding\":false,\"scheduler_config\":{\"profiling_chunk_config\":{\"enabled\":true,\"need_timing\":true,\"execution_mode_trace_enabled\":true,\"smooth_factor\":${CPP_SMOOTH_FACTOR}}}}"
     fi
+    [[ "${PREFIX_CACHE_ENABLED}" == 1 ]] && \
+        prefix_cache_args=(--enable-prefix-caching)
     if [[ "${EXECUTION_MODE}" == "graph" ]]; then
         execution_args=(--compilation-config '{"cudagraph_mode":"FULL_DECODE_ONLY"}')
     fi
@@ -54,7 +57,7 @@ cpp_perf_start_server() {
         --max-num-batched-tokens "${MAX_NUM_BATCHED_TOKENS}" \
         --gpu-memory-utilization 0.90 \
         --enable-chunked-prefill \
-        --no-enable-prefix-caching \
+        "${prefix_cache_args[@]}" \
         --no-async-scheduling \
         --quantization ascend \
         --trust-remote-code \
