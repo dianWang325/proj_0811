@@ -39,6 +39,7 @@ def main() -> int:
             "cpp_mode": case.get("cpp_mode"),
             "execution_mode": case.get("execution_mode"),
             "request_mode": case.get("request_mode"),
+            "data_generator": case.get("data_generator", "script"),
             "request_count": len(requests),
             "expected_request_count": case.get("expected_request_count"),
             "max_fit_chunk": case.get("max_fit_chunk"),
@@ -63,7 +64,7 @@ def main() -> int:
 
     columns = [
         "case_id", "suite", "runner", "cpp_mode", "execution_mode",
-        "request_mode", "request_count", "expected_request_count", "max_fit_chunk",
+        "request_mode", "data_generator", "request_count", "expected_request_count", "max_fit_chunk",
         "state", "exit_code", "scheduler_iterations", "chunk_sizes",
     ]
     with (reports / "summary.csv").open("w", newline="", encoding="utf-8") as handle:
@@ -77,13 +78,14 @@ def main() -> int:
     lines = [
         f"# CPP run {summary['run_id']}", "",
         f"Cases: {len(cases)}; passed: {len(cases) - failed}; failed/incomplete: {failed}.", "",
-        "| Case | Mode | Execution | Request mode | Requests | Max fit chunk | Status |",
-        "|---|---|---|---|---:|---:|---|",
+        "| Case | Mode | Execution | Request mode | Generator | Requests | Max fit chunk | Status |",
+        "|---|---|---|---|---|---:|---:|---|",
     ]
     for case in cases:
         lines.append(
             f"| {case['case_id']} | {case['cpp_mode']} | {case['execution_mode']} "
-            f"| {case['request_mode']} | {case['request_count']} "
+            f"| {case['request_mode']} | {case['data_generator']} "
+            f"| {case['request_count']} "
             f"| {case['max_fit_chunk']} | {case['state']} |"
         )
     (reports / "summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")

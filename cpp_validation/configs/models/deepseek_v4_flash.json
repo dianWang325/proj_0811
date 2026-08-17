@@ -1,0 +1,8 @@
+{
+  "model_path": "/mnt/a800_weight/DeepSeek-V4-Flash-w4a8",
+  "fallback_model_path": "/mnt/a800_weight/DeepSeek-V4-Flash-w8a8-mtp",
+  "served_model_name": "deepseek-v4-flash",
+  "max_model_len": 132000,
+  "pipeline_parallel_size": 2,
+  "tensor_parallel_size": 4
+}

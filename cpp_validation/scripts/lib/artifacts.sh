@@ -15,7 +15,7 @@ cpp_initialize_run() {
     CPP_RUN_DIR="${CPP_RUN_DIR:-${CPP_ARTIFACT_ROOT}/runs/${CPP_RUN_ID}}"
     export CPP_RUN_ID CPP_RUN_DIR
     [[ ! -e "${CPP_RUN_DIR}" ]] || cpp_fail "run directory already exists: ${CPP_RUN_DIR}"
-    mkdir -p "${CPP_RUN_DIR}/cases" "${CPP_RUN_DIR}/reports"
+    mkdir -p "${CPP_RUN_DIR}/cases" "${CPP_RUN_DIR}/datasets" "${CPP_RUN_DIR}/reports"
 
     python3 - "${CPP_RUN_DIR}/run.json" "${CPP_RUN_ID}" "${suite}" \
         "$(cpp_utc_timestamp)" "$(hostname)" "${MODEL_PATH}" "${MODEL_NAME}" \
@@ -55,6 +55,7 @@ cpp_initialize_case() {
     local case_dir="$1" case_id="$2" runner="$3" dynamic="$4"
     local execution_mode="$5" request_mode="$6" token_targets="$7"
     local request_repeats="$8" expected_request_count="$9" max_fit_chunk="${10}"
+    local data_generator="${11}"
     [[ ! -e "${case_dir}" ]] || cpp_fail "case directory already exists: ${case_dir}"
     mkdir -p "${case_dir}/logs" "${case_dir}/raw" "${case_dir}/compiler" "${case_dir}/results"
     python3 - "${case_dir}/case.json" "${case_id}" "${runner}" "${dynamic}" \
@@ -62,7 +63,8 @@ cpp_initialize_case() {
         "${NPU_DEVICES}" "${HCCL_PORT_RANGE}" "${MAX_OUTPUT_TOKENS}" \
         "${PIPELINE_PARALLEL_SIZE}" "${MAX_MODEL_LEN}" \
         "${MAX_NUM_BATCHED_TOKENS}" "${MAX_NUM_SEQS}" \
-        "${request_repeats}" "${expected_request_count}" "${max_fit_chunk}" <<'PY'
+        "${request_repeats}" "${expected_request_count}" "${max_fit_chunk}" \
+        "${data_generator}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -71,7 +73,7 @@ from pathlib import Path
     output, case_id, runner, dynamic, execution_mode, request_mode,
     targets, port, devices, hccl_range, max_output_tokens, pipeline_parallel_size,
     max_model_len, max_num_batched_tokens, max_num_seqs, request_repeats,
-    expected_request_count, max_fit_chunk,
+    expected_request_count, max_fit_chunk, data_generator,
 ) = sys.argv[1:]
 data = {
     "schema_version": 1,
@@ -94,6 +96,77 @@ data = {
     "request_repeats": int(request_repeats),
     "expected_request_count": int(expected_request_count),
     "max_fit_chunk": int(max_fit_chunk),
+    "data_generator": data_generator,
+}
+Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
+cpp_initialize_performance_case() {
+    local case_dir="$1" case_id="$2"
+    [[ ! -e "${case_dir}" ]] || cpp_fail "case directory already exists: ${case_dir}"
+    mkdir -p \
+        "${case_dir}/logs" \
+        "${case_dir}/raw" \
+        "${case_dir}/compiler" \
+        "${case_dir}/results"
+    python3 - "${case_dir}/case.json" "${case_id}" "${RUNNER}" \
+        "${DYNAMIC}" "${EXECUTION_MODE}" "${PERF_DATASET}" \
+        "${SERVER_PORT}" "${NPU_DEVICES}" "${HCCL_PORT_RANGE}" \
+        "${PIPELINE_PARALLEL_SIZE}" "${TENSOR_PARALLEL_SIZE}" \
+        "${MAX_MODEL_LEN}" "${MAX_NUM_BATCHED_TOKENS}" \
+        "${REQUEST_COUNT}" "${WARMUP_COUNT}" "${CONCURRENCY}" \
+        "${REQUEST_RATE}" "${MAX_OUTPUT_TOKENS}" "${DATA_GENERATOR}" \
+        "${MANUAL_WARMUP_ENABLED}" "${MANUAL_WARMUP_INPUT_TOKENS}" \
+        "${MANUAL_WARMUP_OUTPUT_TOKENS}" "${MANUAL_WARMUP_COUNT}" \
+        "${MANUAL_WARMUP_CONCURRENCY}" "${MANUAL_WARMUP_REQUEST_RATE}" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+(
+    output, case_id, runner, dynamic, execution_mode, dataset, port,
+    devices, hccl_range, pp_size, tp_size, max_model_len,
+    max_num_batched_tokens, request_count, warmup_count, concurrency,
+    request_rate, max_output_tokens, data_generator, manual_warmup_enabled,
+    manual_warmup_input_tokens, manual_warmup_output_tokens,
+    manual_warmup_count, manual_warmup_concurrency, manual_warmup_request_rate,
+) = sys.argv[1:]
+data = {
+    "schema_version": 1,
+    "case_id": case_id,
+    "suite": "performance",
+    "runner": runner,
+    "cpp_mode": "dynamic" if dynamic == "1" else "static",
+    "dynamic": dynamic == "1",
+    "execution_mode": execution_mode,
+    "configured_cudagraph_mode": (
+        "FULL_DECODE_ONLY" if execution_mode == "graph" else "NONE"
+    ),
+    "dataset": dataset,
+    "server_port": int(port),
+    "npu_devices": [int(value) for value in devices.split(",")],
+    "hccl_port_range": hccl_range,
+    "pipeline_parallel_size": int(pp_size),
+    "tensor_parallel_size": int(tp_size),
+    "max_model_len": int(max_model_len),
+    "max_num_batched_tokens": int(max_num_batched_tokens),
+    "request_count": int(request_count),
+    "warmup_count": int(warmup_count),
+    "concurrency": int(concurrency),
+    "request_rate": float(request_rate),
+    "max_output_tokens": int(max_output_tokens),
+    "data_generator": data_generator,
+    "manual_warmup": {
+        "enabled": manual_warmup_enabled == "1",
+        "generator": "aisbench",
+        "input_tokens": int(manual_warmup_input_tokens),
+        "output_tokens": int(manual_warmup_output_tokens),
+        "request_count": int(manual_warmup_count),
+        "concurrency": int(manual_warmup_concurrency),
+        "request_rate": float(manual_warmup_request_rate),
+    },
+    "prefix_cache_enabled": False,
 }
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY

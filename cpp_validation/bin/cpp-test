@@ -5,12 +5,15 @@ readonly CPP_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 usage() {
     cat <<'EOF'
-Usage: cpp-test <quick|case|matrix|summarize> [arguments]
+Usage: cpp-test <quick|case|matrix|perf-case|perf-matrix|summarize|perf-summarize> [arguments]
 
   quick       Run the MRv2 dynamic functional smoke case.
   case        Run one case configured through CPP_* environment variables.
   matrix      Run the configured functional compatibility matrix.
+  perf-case   Run one AISBench performance case configured through CPP_* variables.
+  perf-matrix Run the ordered 5-configuration x 2-dataset performance matrix.
   summarize   Rebuild reports for a run directory.
+  perf-summarize Rebuild performance reports for a run directory.
 EOF
 }
 
@@ -22,7 +25,10 @@ case "${command}" in
     quick) exec "${CPP_ROOT}/scripts/run_quick.sh" "$@" ;;
     case) exec "${CPP_ROOT}/scripts/run_case.sh" "$@" ;;
     matrix) exec "${CPP_ROOT}/scripts/run_matrix.sh" "$@" ;;
+    perf-case) exec "${CPP_ROOT}/scripts/run_perf_case.sh" "$@" ;;
+    perf-matrix) exec "${CPP_ROOT}/scripts/run_perf_matrix.sh" "$@" ;;
     summarize) exec python3 "${CPP_ROOT}/analysis/summarize_run.py" "$@" ;;
+    perf-summarize) exec python3 "${CPP_ROOT}/analysis/summarize_performance.py" "$@" ;;
     -h|--help|help) usage ;;
     *) echo "Unknown command: ${command}" >&2; usage >&2; exit 2 ;;
 esac

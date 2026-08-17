@@ -1,0 +1,29 @@
+{
+  "suite": "performance",
+  "data_generator": "aisbench",
+  "request_count": 64,
+  "warmup_count": 30,
+  "max_output_tokens": 1,
+  "max_num_batched_tokens": 24576,
+  "manual_warmup": {
+    "enabled": true,
+    "input_tokens": 131072,
+    "output_tokens": 1,
+    "request_count": 5,
+    "concurrency": 1,
+    "request_rate": 0
+  },
+  "fixed": {
+    "input_tokens": 131072,
+    "concurrency": 12,
+    "request_rate": 0
+  },
+  "variable": {
+    "min_input_tokens": 4096,
+    "max_input_tokens": 65536,
+    "mean_input_tokens": 32768,
+    "concurrency": 12,
+    "request_rate": 0,
+    "seed": 811
+  }
+}

@@ -1,5 +1,6 @@
 {
   "suite": "functional",
+  "data_generator": "aisbench",
   "request_mode": "both",
   "token_targets": [10000, 20000, 40000],
   "max_output_tokens": 1,

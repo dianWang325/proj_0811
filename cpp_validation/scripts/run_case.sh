@@ -24,17 +24,21 @@ readonly TOKEN_TARGETS="${CPP_TOKEN_TARGETS:-${CPP_SUITE_DEFAULTS[1]}}"
 readonly MAX_OUTPUT_TOKENS="${CPP_MAX_OUTPUT_TOKENS:-${CPP_SUITE_DEFAULTS[2]}}"
 readonly MAX_NUM_BATCHED_TOKENS="${CPP_MAX_NUM_BATCHED_TOKENS:-${CPP_SUITE_DEFAULTS[3]}}"
 readonly MAX_NUM_SEQS="${CPP_MAX_NUM_SEQS:-${CPP_SUITE_DEFAULTS[4]}}"
-readonly MAX_FIT_CHUNK="${CPP_MAX_FIT_CHUNK:-8}"
+readonly DATA_GENERATOR="${CPP_DATA_GENERATOR:-${CPP_SUITE_DEFAULTS[5]}}"
+readonly AISBENCH_AUTO_TOOLS_ROOT="${CPP_AISBENCH_AUTO_TOOLS_ROOT:-/home/w00985415/tools/aisbench_auto_tools_prefix}"
 readonly REQUEST_REPEATS="${CPP_REQUEST_REPEATS:-1}"
+readonly MAX_FIT_CHUNK="${CPP_MAX_FIT_CHUNK:-0}"
 readonly STARTUP_TIMEOUT="${CPP_STARTUP_TIMEOUT:-1200}"
 readonly HCCL_PORT_RANGE="${CPP_HCCL_PORT_RANGE:-17000-17100}"
 readonly CPP_ARTIFACT_ROOT="${CPP_ARTIFACT_ROOT:-${PROJECT_ROOT}/artifacts/cpp}"
-readonly CASE_ID="${RUNNER}_$([[ "${DYNAMIC}" == 1 ]] && echo dynamic || echo static)_${EXECUTION_MODE}_${REQUEST_MODE}"
-
-IFS=',' read -r -a token_target_values <<<"${TOKEN_TARGETS}"
-phase_count=1
-[[ "${REQUEST_MODE}" != "both" ]] || phase_count=2
-readonly EXPECTED_REQUEST_COUNT=$((${#token_target_values[@]} * REQUEST_REPEATS * phase_count))
+readonly TOKEN_TARGET_COUNT="$(awk -F, '{print NF}' <<<"${TOKEN_TARGETS}")"
+if [[ "${REQUEST_MODE}" == "both" ]]; then
+    readonly REQUEST_PHASE_COUNT=2
+else
+    readonly REQUEST_PHASE_COUNT=1
+fi
+readonly EXPECTED_REQUEST_COUNT="$((TOKEN_TARGET_COUNT * REQUEST_REPEATS * REQUEST_PHASE_COUNT))"
+readonly CASE_ID="${RUNNER}_$([[ "${DYNAMIC}" == 1 ]] && echo dynamic || echo static)_${EXECUTION_MODE}_${REQUEST_MODE}_${DATA_GENERATOR}"
 
 source "${CPP_ROOT}/scripts/lib/artifacts.sh"
 source "${CPP_ROOT}/scripts/lib/server.sh"
@@ -67,11 +71,11 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cpp_validate_server_inputs
-[[ "${REQUEST_REPEATS}" =~ ^[1-9][0-9]*$ ]] || cpp_fail "CPP_REQUEST_REPEATS must be a positive integer"
-if [[ "${DYNAMIC}" == 1 ]]; then
-    [[ "${MAX_FIT_CHUNK}" =~ ^[1-9][0-9]*$ ]] || cpp_fail "CPP_MAX_FIT_CHUNK must be a positive integer"
-    ((EXPECTED_REQUEST_COUNT > MAX_FIT_CHUNK)) || \
-        cpp_fail "expected request count ${EXPECTED_REQUEST_COUNT} must exceed max_fit_chunk ${MAX_FIT_CHUNK}"
+[[ "${DATA_GENERATOR}" == "aisbench" || "${DATA_GENERATOR}" == "script" ]] || \
+    cpp_fail "CPP_DATA_GENERATOR must be aisbench or script"
+if [[ "${DATA_GENERATOR}" == "aisbench" ]]; then
+    [[ -r "${AISBENCH_AUTO_TOOLS_ROOT}/generate_dataset.py" ]] || \
+        cpp_fail "aisbench_auto_tools_prefix is not installed at ${AISBENCH_AUTO_TOOLS_ROOT}"
 fi
 
 if [[ -z "${CPP_RUN_DIR:-}" ]]; then
@@ -84,8 +88,26 @@ fi
 case_dir="${CPP_RUN_DIR}/cases/${CASE_ID}"
 cpp_initialize_case "${case_dir}" "${CASE_ID}" "${RUNNER}" "${DYNAMIC}" \
     "${EXECUTION_MODE}" "${REQUEST_MODE}" "${TOKEN_TARGETS}" \
-    "${REQUEST_REPEATS}" "${EXPECTED_REQUEST_COUNT}" "${MAX_FIT_CHUNK}"
+    "${REQUEST_REPEATS}" "${EXPECTED_REQUEST_COUNT}" "${MAX_FIT_CHUNK}" \
+    "${DATA_GENERATOR}"
 server_pid_file="${case_dir}/server.pid"
+
+dataset_path=""
+if [[ "${DATA_GENERATOR}" == "aisbench" ]]; then
+    export PYTHONPATH="${PROJECT_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+    case_stage="generating_dataset"
+    dataset_path="${case_dir}/raw/dataset.jsonl"
+    python3 "${CPP_ROOT}/workloads/data_generation.py" \
+        --backend aisbench \
+        --model-path "${MODEL_PATH}" \
+        --lengths "${TOKEN_TARGETS}" \
+        --output-tokens "${MAX_OUTPUT_TOKENS}" \
+        --seed 811 \
+        --aisbench-auto-tools-root "${AISBENCH_AUTO_TOOLS_ROOT}" \
+        --output "${dataset_path}" \
+        --metadata-output "${case_dir}/raw/dataset_metadata.json" \
+        > >(tee "${case_dir}/logs/dataset_generation.log") 2>&1
+fi
 
 case_stage="starting_server"
 echo "Starting ${CASE_ID} on physical NPUs ${NPU_DEVICES}; run=${CPP_RUN_ID}"
@@ -101,8 +123,10 @@ CPP_MODEL_NAME="${MODEL_NAME}" \
 CPP_PORT="${SERVER_PORT}" \
 CPP_REQUEST_MODE="${REQUEST_MODE}" \
 CPP_TOKEN_TARGETS="${TOKEN_TARGETS}" \
-CPP_REQUEST_REPEATS="${REQUEST_REPEATS}" \
 CPP_MAX_OUTPUT_TOKENS="${MAX_OUTPUT_TOKENS}" \
+CPP_REQUEST_REPEATS="${REQUEST_REPEATS}" \
+CPP_DATA_GENERATOR="${DATA_GENERATOR}" \
+CPP_DATASET_PATH="${dataset_path}" \
 CPP_RESULT_PATH="${case_dir}/raw/requests.json" \
     python3 "${CPP_ROOT}/workloads/functional/long_context.py" \
     > >(tee "${case_dir}/logs/client.log") 2>&1
