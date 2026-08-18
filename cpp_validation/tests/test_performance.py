@@ -47,16 +47,26 @@ def test_mrv2_performance_matrix_has_cpp_off_eager_controls():
     ]
 
     assert _matrix_rows("performance_mrv2.tsv") == expected
-    assert all(row in _matrix_rows("performance.tsv") for row in expected)
+    full_rows = _matrix_rows("performance.tsv")
+    assert all(
+        (*row, dataset) in full_rows
+        for row in expected
+        for dataset in ("fixed", "variable")
+    )
 
 
-def test_full_matrix_runs_mrv2_then_mrv1_then_graph():
+def test_full_matrix_runs_in_requested_cross_dataset_order():
     assert _matrix_rows("performance.tsv") == [
-        ("mrv2", "0", "eager"),
-        ("mrv2", "1", "eager"),
-        ("mrv1", "0", "eager"),
-        ("mrv1", "1", "eager"),
-        ("mrv2", "1", "graph"),
+        ("mrv2", "0", "eager", "variable"),
+        ("mrv1", "1", "eager", "variable"),
+        ("mrv2", "1", "eager", "variable"),
+        ("mrv2", "0", "eager", "fixed"),
+        ("mrv1", "1", "eager", "fixed"),
+        ("mrv2", "1", "eager", "fixed"),
+        ("mrv2", "1", "graph", "fixed"),
+        ("mrv1", "0", "eager", "variable"),
+        ("mrv1", "0", "eager", "fixed"),
+        ("mrv2", "1", "graph", "variable"),
     ]
 
 

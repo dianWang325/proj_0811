@@ -133,9 +133,11 @@ fixed and variable datasets. Reports compare these pairs directly as
 `cpp_mrv2_vs_mrv2_static`, isolating CPP overhead or benefit without changing
 the model runner or execution mode.
 
-Execution order is MRv2 CPP off/on, MRv1 CPP off/on, then MRv2 CPP Graph; each
-configuration runs fixed before variable. Reports include TTFT average, P50,
-P90, and P95 together with aggregate and per-card input throughput.
+The full matrix records the dataset in every row so fixed and variable cases
+can be interleaved explicitly. The checked-in order is the authoritative run
+order; focused legacy three-column matrices still expand each row to fixed then
+variable. Reports include TTFT average, P50, P90, and P95 together with
+aggregate and per-card input throughput.
 
 The `mrv2_cpp1_graph` cases request `FULL_DECODE_ONLY`. Before the measured
 one-token workload, an untimed two-token probe proves that normal inference

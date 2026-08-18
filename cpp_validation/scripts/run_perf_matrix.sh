@@ -23,10 +23,19 @@ cpp_initialize_run performance-matrix
 
 failure_count=0
 case_count=0
-while read -r runner dynamic execution_mode extra; do
+while read -r runner dynamic execution_mode dataset extra; do
     [[ -n "${runner:-}" && "${runner}" != \#* ]] || continue
-    [[ -z "${extra:-}" ]] || cpp_fail "invalid matrix row: ${runner} ${dynamic} ${execution_mode} ${extra}"
-    for dataset in fixed variable; do
+    [[ -z "${extra:-}" ]] || \
+        cpp_fail "invalid matrix row: ${runner} ${dynamic} ${execution_mode} ${dataset} ${extra}"
+    if [[ -n "${dataset:-}" ]]; then
+        [[ "${dataset}" == "fixed" || "${dataset}" == "variable" ]] || \
+            cpp_fail "invalid performance dataset in matrix: ${dataset}"
+        datasets=("${dataset}")
+    else
+        # Preserve compatibility with focused three-column matrix files.
+        datasets=(fixed variable)
+    fi
+    for dataset in "${datasets[@]}"; do
         case_count=$((case_count + 1))
         if ! env \
             CPP_RUNNER="${runner}" \
