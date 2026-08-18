@@ -117,12 +117,10 @@ cpp_initialize_performance_case() {
         "${MAX_MODEL_LEN}" "${MAX_NUM_BATCHED_TOKENS}" \
         "${REQUEST_COUNT}" "${WARMUP_COUNT}" "${CONCURRENCY}" \
         "${REQUEST_RATE}" "${MAX_OUTPUT_TOKENS}" "${DATA_GENERATOR}" \
-        "${MANUAL_WARMUP_ENABLED}" "${MANUAL_WARMUP_INPUT_TOKENS}" \
-        "${MANUAL_WARMUP_OUTPUT_TOKENS}" "${MANUAL_WARMUP_COUNT}" \
-        "${MANUAL_WARMUP_CONCURRENCY}" "${MANUAL_WARMUP_REQUEST_RATE}" \
+        "${MANUAL_WARMUP_ENABLED}" "${MANUAL_WARMUP_ENABLED_CONFIG}" \
+        "${MANUAL_WARMUP_DATASET_MODE}" "${MANUAL_WARMUP_SEED}" \
         "${PREFIX_CACHE_ENABLED}" "${PREFIX_REPEAT_RATE}" "${PREFIX_TEST}" \
-        "${CPP_SMOOTH_FACTOR}" "${CPP_CALIBRATION_SAME_DISTRIBUTION_FIRST}" \
-        "${POST_MANUAL_REWARM_COUNT}" <<'PY'
+        "${CPP_SMOOTH_FACTOR}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -132,10 +130,9 @@ from pathlib import Path
     devices, hccl_range, pp_size, tp_size, max_model_len,
     max_num_batched_tokens, request_count, warmup_count, concurrency,
     request_rate, max_output_tokens, data_generator, manual_warmup_enabled,
-    manual_warmup_input_tokens, manual_warmup_output_tokens,
-    manual_warmup_count, manual_warmup_concurrency, manual_warmup_request_rate,
-    prefix_cache_enabled, prefix_repeat_rate, prefix_test, smooth_factor,
-    calibration_same_distribution_first, post_manual_rewarm_count,
+    manual_warmup_enabled_config, manual_warmup_dataset_mode,
+    manual_warmup_seed, prefix_cache_enabled, prefix_repeat_rate,
+    prefix_test, smooth_factor,
 ) = sys.argv[1:]
 data = {
     "schema_version": 1,
@@ -164,12 +161,14 @@ data = {
     "data_generator": data_generator,
     "manual_warmup": {
         "enabled": manual_warmup_enabled == "1",
-        "generator": "aisbench",
-        "input_tokens": int(manual_warmup_input_tokens),
-        "output_tokens": int(manual_warmup_output_tokens),
-        "request_count": int(manual_warmup_count),
-        "concurrency": int(manual_warmup_concurrency),
-        "request_rate": float(manual_warmup_request_rate),
+        "configured_enabled": manual_warmup_enabled_config,
+        "dataset_mode": manual_warmup_dataset_mode,
+        "dataset": dataset,
+        "seed": int(manual_warmup_seed),
+        "request_count": int(warmup_count),
+        "concurrency": int(concurrency),
+        "request_rate": float(request_rate),
+        "output_tokens": int(max_output_tokens),
     },
     "prefix_cache": {
         "enabled": prefix_cache_enabled == "1",
@@ -178,10 +177,6 @@ data = {
     },
     "cpp_tuning": {
         "smooth_factor": float(smooth_factor),
-        "online_calibration_same_distribution_first": (
-            calibration_same_distribution_first == "1"
-        ),
-        "post_manual_rewarm_count": int(post_manual_rewarm_count),
     },
 }
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

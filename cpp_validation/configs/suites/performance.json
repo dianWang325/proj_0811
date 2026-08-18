@@ -1,22 +1,15 @@
 {
   "suite": "performance",
   "data_generator": "aisbench",
-  "warmup_count": 30,
   "max_output_tokens": 1,
   "cpp": {
-    "smooth_factor": 0.8,
-    "online_calibration": {
-      "same_distribution_first": true,
-      "post_manual_rewarm_count": 5
-    }
+    "smooth_factor": 0.8
   },
   "manual_warmup": {
-    "enabled": true,
-    "input_tokens": 131072,
-    "output_tokens": 1,
-    "request_count": 5,
-    "concurrency": 1,
-    "request_rate": 0
+    "enabled": "auto",
+    "dataset_mode": "generated",
+    "request_count": 30,
+    "seed_offset": 1
   },
   "fixed": {
     "input_tokens": 131072,

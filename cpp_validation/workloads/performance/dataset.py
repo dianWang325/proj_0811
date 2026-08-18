@@ -74,16 +74,17 @@ def load_generated_records(dataset_path: str | Path) -> list[dict]:
 class ExactPromptFactory:
     """Build prompts whose tokenizer round trip preserves the requested size."""
 
-    def __init__(self, model_path: str):
+    def __init__(self, model_path: str, variant: int = 0):
         self.tokenizer = AutoTokenizer.from_pretrained(
             model_path,
             local_files_only=True,
             trust_remote_code=True,
         )
-        self.token_id = self._find_round_trip_token()
+        self.token_id = self._find_round_trip_token(variant)
         self._prompt_cache: dict[int, str] = {}
 
-    def _find_round_trip_token(self) -> int:
+    def _find_round_trip_token(self, variant: int) -> int:
+        stable_ids = []
         for text in (" hello", " world", " test", " A", " B"):
             token_ids = self.tokenizer.encode(text, add_special_tokens=False)
             if len(token_ids) != 1:
@@ -91,7 +92,10 @@ class ExactPromptFactory:
             token_id = token_ids[0]
             probe = self.tokenizer.decode([token_id] * 16, skip_special_tokens=False)
             if self.tokenizer.encode(probe, add_special_tokens=False) == [token_id] * 16:
-                return token_id
+                if token_id not in stable_ids:
+                    stable_ids.append(token_id)
+        if stable_ids:
+            return stable_ids[variant % len(stable_ids)]
         raise RuntimeError("could not find a tokenizer token with a stable repeated round trip")
 
     def build(self, token_count: int) -> str:

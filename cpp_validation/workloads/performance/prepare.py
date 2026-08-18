@@ -128,6 +128,7 @@ def main() -> int:
     parser.add_argument(
         "--mode", choices=("warmup", "prefix-prime", "graph-probe"), required=True
     )
+    parser.add_argument("--dataset-mode", choices=("generated", "reuse"))
     parser.add_argument("--dataset", choices=("fixed", "variable"), required=True)
     parser.add_argument("--model-path", required=True)
     parser.add_argument("--model-name", required=True)
@@ -140,6 +141,9 @@ def main() -> int:
     parser.add_argument("--dataset-metadata", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
+
+    if args.mode == "warmup" and args.dataset_mode is None:
+        parser.error("warmup mode requires --dataset-mode")
 
     prefix_tokens = None
     if args.mode == "graph-probe":
@@ -219,6 +223,12 @@ def main() -> int:
         "expected_output_tokens": output_tokens,
         "records": records,
     }
+    if args.mode == "warmup":
+        result["dataset_mode"] = args.dataset_mode
+        result["dataset_path"] = str(args.dataset_path.resolve())
+        if args.dataset_metadata is not None:
+            metadata = json.loads(args.dataset_metadata.read_text(encoding="utf-8"))
+            result["dataset_seed"] = metadata.get("seed")
     if args.mode == "prefix-prime":
         result["expected_prefix_tokens"] = prefix_tokens
     if args.mode == "graph-probe":

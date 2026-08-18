@@ -128,6 +128,22 @@ def test_generated_jsonl_loader_checks_required_fields(tmp_path):
     assert load_generated_records(path) == [record]
 
 
+def test_generated_warmup_rejects_measurement_prompt_overlap(tmp_path):
+    measurement = tmp_path / "measurement.jsonl"
+    measurement.write_text(
+        json.dumps({"question": "same prompt"}) + "\n", encoding="utf-8"
+    )
+
+    try:
+        data_generation.validate_dataset_isolation(
+            "/model", ["same prompt"], measurement, None
+        )
+    except RuntimeError as error:
+        assert "overlaps measurement prompts" in str(error)
+    else:
+        raise AssertionError("overlapping warmup data was accepted")
+
+
 def test_manual_warmup_command_matches_requested_contract():
     command = build_command(
         input_len=131072,
@@ -202,12 +218,10 @@ def test_performance_manual_warmup_defaults():
     warmup = json.loads(path.read_text(encoding="utf-8"))["manual_warmup"]
 
     assert warmup == {
-        "enabled": True,
-        "input_tokens": 131072,
-        "output_tokens": 1,
-        "request_count": 5,
-        "concurrency": 1,
-        "request_rate": 0,
+        "enabled": "auto",
+        "dataset_mode": "generated",
+        "request_count": 30,
+        "seed_offset": 1,
     }
 
 

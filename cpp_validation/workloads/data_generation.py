@@ -106,12 +106,12 @@ def generate_with_aisbench_auto_tools(
     return [prompt for prompt in prompts if prompt is not None]
 
 
-def generate_with_script(*, model_path: str, lengths: list[int]) -> list[str]:
+def generate_with_script(*, model_path: str, lengths: list[int], seed: int) -> list[str]:
     """Retain the original exact repeated-token generator as the fallback path."""
 
     from cpp_validation.workloads.performance.dataset import ExactPromptFactory
 
-    factory = ExactPromptFactory(model_path)
+    factory = ExactPromptFactory(model_path, variant=seed)
     return [factory.build(length) for length in lengths]
 
 
@@ -242,6 +242,49 @@ def validate_prompts(model_path: str, prompts: list[str], lengths: list[int]) ->
     return actual_lengths
 
 
+def validate_dataset_isolation(
+    model_path: str,
+    prompts: list[str],
+    other_path: Path,
+    prefix_lengths: list[int] | None,
+) -> None:
+    """Reject generated warmup content that could prime measurement cache keys."""
+
+    if not other_path.is_file():
+        raise ValueError(f"disjoint comparison dataset is not readable: {other_path}")
+    other_records = [
+        json.loads(line)
+        for line in other_path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    other_prompts = [record["question"] for record in other_records]
+    overlap = set(prompts).intersection(other_prompts)
+    if overlap:
+        raise RuntimeError(
+            f"generated warmup dataset overlaps measurement prompts: count={len(overlap)}"
+        )
+    if prefix_lengths is None:
+        return
+
+    from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained(
+        model_path,
+        local_files_only=True,
+        trust_remote_code=True,
+    )
+    anchor_index = max(range(len(prefix_lengths)), key=prefix_lengths.__getitem__)
+    prefix_length = prefix_lengths[anchor_index]
+    current_prefix = tokenizer.encode(
+        prompts[anchor_index], add_special_tokens=False
+    )[:prefix_length]
+    other_prefix = tokenizer.encode(
+        other_prompts[anchor_index], add_special_tokens=False
+    )[:prefix_length]
+    if current_prefix == other_prefix:
+        raise RuntimeError("generated warmup dataset reuses the measurement prefix")
+
+
 def repair_aisbench_prompt_lengths(
     model_path: str, prompts: list[str], lengths: list[int]
 ) -> tuple[list[str], list[dict]]:
@@ -309,6 +352,7 @@ def generate_records(
     tool_root: Path = DEFAULT_AISBENCH_AUTO_TOOLS_ROOT,
     prefix_repeat_rate: str | float | None = None,
     prefix_test: bool = False,
+    disjoint_from: Path | None = None,
 ) -> tuple[list[dict], dict]:
     if backend not in SUPPORTED_BACKENDS:
         raise ValueError(f"unsupported data generator: {backend}")
@@ -330,7 +374,7 @@ def generate_records(
         )
         backend_revision = tool_revision(tool_root)
     else:
-        prompts = generate_with_script(model_path=model_path, lengths=lengths)
+        prompts = generate_with_script(model_path=model_path, lengths=lengths, seed=seed)
         backend_revision = None
 
     prefix_lengths = None
@@ -351,6 +395,10 @@ def generate_records(
         )
 
     actual_lengths = validate_prompts(model_path, prompts, lengths)
+    if disjoint_from is not None:
+        validate_dataset_isolation(
+            model_path, prompts, disjoint_from, prefix_lengths
+        )
     records = [
         {
             "index": index,
@@ -374,6 +422,7 @@ def generate_records(
         "mean_input_tokens": sum(actual_lengths) / len(actual_lengths),
         "total_input_tokens": sum(actual_lengths),
         "token_length_repairs": token_length_repairs,
+        "disjoint_from": str(disjoint_from) if disjoint_from is not None else None,
         "aisbench_auto_tools_root": str(tool_root) if backend == "aisbench" else None,
         "aisbench_auto_tools_revision": backend_revision,
         "prefix_cache": {
@@ -436,6 +485,7 @@ def main() -> int:
     parser.add_argument("--seed", type=int, default=811)
     parser.add_argument("--prefix-repeat-rate")
     parser.add_argument("--prefix-test", action="store_true")
+    parser.add_argument("--disjoint-from", type=Path)
     parser.add_argument(
         "--aisbench-auto-tools-root",
         type=Path,
@@ -458,6 +508,7 @@ def main() -> int:
             tool_root=args.aisbench_auto_tools_root,
             prefix_repeat_rate=args.prefix_repeat_rate,
             prefix_test=args.prefix_test,
+            disjoint_from=args.disjoint_from,
         )
     except (RuntimeError, ValueError) as error:
         parser.error(str(error))

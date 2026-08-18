@@ -120,6 +120,9 @@ def validate_case(
     data_generator: str = "script",
     dataset_metadata: Path | None = None,
     manual_warmup: Path | None = None,
+    warmup_count: int | None = None,
+    warmup_dataset_mode: str | None = None,
+    warmup_dataset_metadata: Path | None = None,
     prefix_prime: Path | None = None,
 ) -> tuple[dict, list[str]]:
     errors = []
@@ -172,8 +175,34 @@ def validate_case(
             manual_warmup_metadata = json.loads(
                 manual_warmup.read_text(encoding="utf-8")
             )
-            if manual_warmup_metadata.get("exit_code") != 0:
-                errors.append("AISBench manual warmup did not complete successfully")
+            if manual_warmup_metadata.get("mode") != "warmup":
+                errors.append("manual warmup result has the wrong mode")
+            if manual_warmup_metadata.get("dataset") != dataset:
+                errors.append("manual warmup dataset does not match the measurement")
+            if manual_warmup_metadata.get("dataset_mode") != warmup_dataset_mode:
+                errors.append("manual warmup dataset mode does not match the case")
+            if manual_warmup_metadata.get("request_count") != warmup_count:
+                errors.append("manual warmup request count does not match the case")
+            records = manual_warmup_metadata.get("records", [])
+            if len(records) != warmup_count or any(
+                record.get("completion_tokens") != 1 for record in records
+            ):
+                errors.append("manual warmup requests did not all complete successfully")
+        if warmup_dataset_metadata is None or not warmup_dataset_metadata.is_file():
+            errors.append("manual warmup dataset metadata is missing")
+        else:
+            warmup_generation = json.loads(
+                warmup_dataset_metadata.read_text(encoding="utf-8")
+            )
+            if warmup_generation.get("input_token_lengths") != expected_lengths:
+                errors.append("manual warmup data violates the target length distribution")
+            if warmup_dataset_mode == "generated":
+                if not warmup_generation.get("disjoint_from"):
+                    errors.append("generated manual warmup has no isolation evidence")
+                if generation_metadata is not None and (
+                    warmup_generation.get("seed") == generation_metadata.get("seed")
+                ):
+                    errors.append("generated manual warmup reused the measurement seed")
     prefix_prime_metadata = None
     prefix_config = (
         generation_metadata.get("prefix_cache", {})
@@ -389,6 +418,11 @@ def main() -> int:
     parser.add_argument("--data-generator", choices=("aisbench", "script"), default="script")
     parser.add_argument("--dataset-metadata", type=Path)
     parser.add_argument("--manual-warmup", type=Path)
+    parser.add_argument("--warmup-count", type=int)
+    parser.add_argument(
+        "--warmup-dataset-mode", choices=("generated", "reuse")
+    )
+    parser.add_argument("--warmup-dataset-metadata", type=Path)
     parser.add_argument("--prefix-prime", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
@@ -406,6 +440,9 @@ def main() -> int:
         data_generator=args.data_generator,
         dataset_metadata=args.dataset_metadata,
         manual_warmup=args.manual_warmup,
+        warmup_count=args.warmup_count,
+        warmup_dataset_mode=args.warmup_dataset_mode,
+        warmup_dataset_metadata=args.warmup_dataset_metadata,
         prefix_prime=args.prefix_prime,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)

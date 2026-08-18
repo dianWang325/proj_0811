@@ -18,8 +18,9 @@ validation. Runtime artifacts are deliberately kept outside the source tree in
 The shared lifecycle is: create run, create case, generate and validate the
 dataset, start the server, wait for health, run untimed preparation, run the
 measured workload, validate, write status, and stop the server. Dataset JSONL
-and generation provenance are immutable case artifacts, so warmup and measured
-requests consume the same verified prompts.
+and generation provenance are immutable case artifacts. Warmup either consumes
+an independently generated, verified distribution or explicitly reuses the
+measured prompts.
 
 ## Dataset backends and AISBench auto tools
 
@@ -38,9 +39,9 @@ Install and verify the pinned upstream revision in the container with:
 
 The default installation is
 `/home/w00985415/tools/aisbench_auto_tools_prefix`; override it with
-`CPP_AISBENCH_AUTO_TOOLS_ROOT`. Each manual warmup receives a private copy of
-the tool configuration and output directory, avoiding cross-case `config.py`,
-dataset, and log reuse.
+`CPP_AISBENCH_AUTO_TOOLS_ROOT`. The isolated upstream manual-warmup helper keeps
+a private tool configuration and output directory for diagnostic use; the
+standard performance flow uses the generated dataset pipeline below.
 
 ## Running tests
 
@@ -109,23 +110,19 @@ nested 90% token prefix generated from the selected backend; prefix caching is
 enabled only for that dataset. Generation metadata records and validates the
 planned prefix-hit ratio.
 
-After the service becomes healthy, the fixed AISBench hardware warmup remains
-five requests and is excluded from performance metrics:
+Hardware warmup is one optional, untimed stage. Its default is `auto`: CPP
+cases enable it and static cases disable it. `CPP_MANUAL_WARMUP_ENABLED=0` or
+`1` overrides that default. When enabled, the warmup always follows the active
+fixed or variable workload distribution and uses its concurrency and output
+length; there is no additional fixed-128K stage or post-warmup rewarm.
 
-```bash
-python3 aisbench_test.py --input_len 131072 --output_len 1 --data_num 5 --concurrency 1 --request_rate 0
-```
-
-For CPP-enabled cases, 30 untimed requests from the target dataset now run
-before the fixed manual warmup, so the bounded online timing history is fitted
-to the measured distribution instead of being consumed by 128K-only traffic.
-Five same-distribution requests are sent again after the manual warmup to
-restore the variable prefix-cache state, followed by one untimed request for
-the longest shared prefix (the `--prefix_test` equivalent). Static cases keep the conventional
-manual-warmup then 30-request warmup order. CPP uses `smooth_factor=0.8`.
-Override the manual stage with `CPP_MANUAL_WARMUP_*`, or disable it explicitly with
-`CPP_MANUAL_WARMUP_ENABLED=0` for diagnostic comparisons. The normal matrix
-keeps it enabled.
+`CPP_MANUAL_WARMUP_DATASET_MODE=generated` is the default. It builds an
+independent dataset with the same length and prefix-cache distribution using a
+different seed, and rejects prompt or shared-prefix overlap with the measured
+dataset. `reuse` is available for diagnostics but intentionally allows the
+measured prompts to be used before timing. `CPP_WARMUP_COUNT` controls the
+single warmup stage. The variable prefix-prime remains separate because it
+establishes the declared measurement cache state rather than warming hardware.
 
 The pre-tuning configuration is preserved in
 `configs/snapshots/performance_pre_tuning_20260817.json`; do not overwrite this

@@ -73,9 +73,11 @@ def test_performance_load_uses_requested_pressure_without_changing_lengths():
 
     assert suite["max_output_tokens"] == 1
     assert suite["cpp"]["smooth_factor"] == 0.8
-    assert suite["cpp"]["online_calibration"] == {
-        "same_distribution_first": True,
-        "post_manual_rewarm_count": 5,
+    assert suite["manual_warmup"] == {
+        "enabled": "auto",
+        "dataset_mode": "generated",
+        "request_count": 30,
+        "seed_offset": 1,
     }
     assert suite["fixed"]["input_tokens"] == 131072
     assert suite["fixed"]["request_count"] == 5
@@ -121,10 +123,10 @@ def test_shell_loader_exposes_dataset_specific_tuning():
     )
     values = completed.stdout.splitlines()
 
-    assert len(values) == 29
+    assert len(values) == 24
     assert values[3:7] == ["5", "1", "0", "32768"]
     assert values[10:14] == ["64", "4", "0", "20480"]
-    assert values[22:] == ["0.8", "1", "5", "0", "1", "90%", "1"]
+    assert values[16:] == ["auto", "generated", "1", "0.8", "0", "1", "90%", "1"]
 
 
 def test_summary_compares_mrv2_cpp_on_with_same_runner_cpp_off():
