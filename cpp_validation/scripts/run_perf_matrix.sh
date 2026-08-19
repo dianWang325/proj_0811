@@ -14,11 +14,14 @@ cpp_load_performance_config_defaults "${MODEL_CONFIG}" "${SUITE_CONFIG}"
 readonly MODEL_PATH="${CPP_MODEL_PATH:-${CPP_PERF_MODEL_DEFAULTS[0]}}"
 readonly MODEL_NAME="${CPP_MODEL_NAME:-${CPP_PERF_MODEL_DEFAULTS[2]}}"
 readonly NPU_DEVICES="${CPP_NPU_DEVICES:-8,9,10,11,12,13,14,15}"
+readonly NEED_TIMING="${CPP_NEED_TIMING:-true}"
 readonly CPP_ARTIFACT_ROOT="${CPP_ARTIFACT_ROOT:-${PROJECT_ROOT}/artifacts/cpp}"
 
 source "${CPP_ROOT}/scripts/lib/artifacts.sh"
 
 [[ -r "${MATRIX_FILE}" ]] || cpp_fail "performance matrix is not readable: ${MATRIX_FILE}"
+[[ "${NEED_TIMING}" == "true" || "${NEED_TIMING}" == "false" ]] || \
+    cpp_fail "CPP_NEED_TIMING must be true or false"
 cpp_initialize_run performance-matrix
 
 failure_count=0
@@ -38,6 +41,7 @@ while read -r runner dynamic execution_mode dataset extra; do
     for dataset in "${datasets[@]}"; do
         case_count=$((case_count + 1))
         if ! env \
+            CPP_NEED_TIMING="${NEED_TIMING}" \
             CPP_RUNNER="${runner}" \
             CPP_DYNAMIC="${dynamic}" \
             CPP_EXECUTION_MODE="${execution_mode}" \

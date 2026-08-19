@@ -90,6 +90,7 @@ CPP_RUNNER=mrv2 \
 CPP_DYNAMIC=1 \
 CPP_EXECUTION_MODE=eager \
 CPP_PERF_DATASET=fixed \
+CPP_NEED_TIMING=false \
 CPP_NPU_DEVICES=8,9,10,11,12,13,14,15 \
 ./proj_0811/cpp_validation/bin/cpp-test perf-case
 ```
@@ -100,6 +101,10 @@ Run the complete five-configuration by two-dataset matrix:
 CPP_NPU_DEVICES=8,9,10,11,12,13,14,15 \
 ./proj_0811/cpp_validation/bin/cpp-test perf-matrix
 ```
+
+`CPP_NEED_TIMING=true|false` controls `profiling_chunk_config.need_timing`
+for CPP-enabled performance cases and defaults to `true`. The selected value
+is recorded in each case's `case.json` under `cpp_tuning.need_timing`.
 
 The fixed dataset contains 5 requests of exactly 131072 input tokens at
 concurrency 1 and uses `max_num_batched_tokens=32768`. The variable dataset

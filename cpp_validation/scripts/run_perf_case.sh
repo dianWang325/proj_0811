@@ -34,6 +34,7 @@ readonly MANUAL_WARMUP_SEED_OFFSET="${CPP_MANUAL_WARMUP_SEED_OFFSET:-${CPP_PERF_
     cpp_fail "CPP_MANUAL_WARMUP_SEED_OFFSET must be an integer"
 readonly MANUAL_WARMUP_SEED="$((CPP_PERF_SUITE_DEFAULTS[14] + MANUAL_WARMUP_SEED_OFFSET))"
 readonly CPP_SMOOTH_FACTOR="${CPP_SMOOTH_FACTOR:-${CPP_PERF_SUITE_DEFAULTS[19]}}"
+readonly NEED_TIMING="${CPP_NEED_TIMING:-true}"
 readonly AISBENCH_AUTO_TOOLS_ROOT="${CPP_AISBENCH_AUTO_TOOLS_ROOT:-/home/w00985415/tools/aisbench_auto_tools_prefix}"
 readonly NPU_DEVICES="${CPP_NPU_DEVICES:-8,9,10,11,12,13,14,15}"
 readonly SERVER_PORT="${CPP_PORT:-18080}"
@@ -109,6 +110,8 @@ fi
     cpp_fail "CPP_MANUAL_WARMUP_DATASET_MODE must be generated or reuse"
 [[ "${PREFIX_CACHE_ENABLED}" == "0" || "${PREFIX_CACHE_ENABLED}" == "1" ]] || \
     cpp_fail "CPP_PREFIX_CACHE_ENABLED must be 0 or 1"
+[[ "${NEED_TIMING}" == "true" || "${NEED_TIMING}" == "false" ]] || \
+    cpp_fail "CPP_NEED_TIMING must be true or false"
 if [[ "${MANUAL_WARMUP_ENABLED}" == "1" ]]; then
     [[ "${WARMUP_COUNT}" -gt 0 ]] || cpp_fail "warmup count must be positive"
 fi

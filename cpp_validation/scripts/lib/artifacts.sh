@@ -120,7 +120,7 @@ cpp_initialize_performance_case() {
         "${MANUAL_WARMUP_ENABLED}" "${MANUAL_WARMUP_ENABLED_CONFIG}" \
         "${MANUAL_WARMUP_DATASET_MODE}" "${MANUAL_WARMUP_SEED}" \
         "${PREFIX_CACHE_ENABLED}" "${PREFIX_REPEAT_RATE}" "${PREFIX_TEST}" \
-        "${CPP_SMOOTH_FACTOR}" <<'PY'
+        "${CPP_SMOOTH_FACTOR}" "${NEED_TIMING}" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -132,7 +132,7 @@ from pathlib import Path
     request_rate, max_output_tokens, data_generator, manual_warmup_enabled,
     manual_warmup_enabled_config, manual_warmup_dataset_mode,
     manual_warmup_seed, prefix_cache_enabled, prefix_repeat_rate,
-    prefix_test, smooth_factor,
+    prefix_test, smooth_factor, need_timing,
 ) = sys.argv[1:]
 data = {
     "schema_version": 1,
@@ -177,6 +177,7 @@ data = {
     },
     "cpp_tuning": {
         "smooth_factor": float(smooth_factor),
+        "need_timing": need_timing == "true",
     },
 }
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

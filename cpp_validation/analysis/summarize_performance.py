@@ -140,6 +140,7 @@ def main() -> int:
                     "dataset": case["dataset"],
                     "runner": case["runner"],
                     "cpp_mode": case["cpp_mode"],
+                    "need_timing": case.get("cpp_tuning", {}).get("need_timing"),
                     "execution_mode": case["execution_mode"],
                     "data_generator": case.get("data_generator", "script"),
                     "pp": case["pipeline_parallel_size"],
@@ -216,6 +217,7 @@ def main() -> int:
         "dataset",
         "runner",
         "cpp_mode",
+        "need_timing",
         "execution_mode",
         "data_generator",
         "pp",
@@ -259,14 +261,15 @@ def main() -> int:
         "",
         f"Cases: {len(cases)}; passed: {len(cases) - failed}; failed/incomplete: {failed}.",
         "",
-        "| Case | Dataset | Generator | Runner | CPP | Mode | Load (C/RPS) | TTFT avg/P50/P90/P95 (ms) | Input tok/s | Input tok/s/card | CG config | Profile samples/modes/eager | Inference modes | Probe graph | Isolation | Status |",
-        "|---|---|---|---|---|---|---|---|---:|---:|---|---|---|---|---|---|",
+        "| Case | Dataset | Generator | Runner | CPP | Need timing | Mode | Load (C/RPS) | TTFT avg/P50/P90/P95 (ms) | Input tok/s | Input tok/s/card | CG config | Profile samples/modes/eager | Inference modes | Probe graph | Isolation | Status |",
+        "|---|---|---|---|---|---|---|---|---|---:|---:|---|---|---|---|---|---|",
     ]
     for case in cases:
         lines.append(
             f"| {case['case_id']} | {case['dataset']} | {case['data_generator']} "
             f"| {case['runner']} "
-            f"| {case['cpp_mode']} | {case['execution_mode']} "
+            f"| {case['cpp_mode']} | {case['need_timing']} "
+            f"| {case['execution_mode']} "
             f"| {case['concurrency']}/{case['request_rate']} "
             f"| {case['average_ttft_ms']}/{case['ttft_p50_ms']}/"
             f"{case['ttft_p90_ms']}/{case['ttft_p95_ms']} "
