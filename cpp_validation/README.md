@@ -105,6 +105,8 @@ CPP_NPU_DEVICES=8,9,10,11,12,13,14,15 \
 `CPP_NEED_TIMING=true|false` controls `profiling_chunk_config.need_timing`
 for CPP-enabled performance cases and defaults to `true`. The selected value
 is recorded in each case's `case.json` under `cpp_tuning.need_timing`.
+`CPP_AISBENCH_AUTO_TOOLS_ROOT` defaults to the verified repository copy at
+`${PROJECT_ROOT}/deps/aisbench_auto_tools_prefix` and can still be overridden.
 
 The fixed dataset contains 5 requests of exactly 131072 input tokens at
 concurrency 1 and uses `max_num_batched_tokens=32768`. The variable dataset

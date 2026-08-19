@@ -15,6 +15,7 @@ readonly MODEL_PATH="${CPP_MODEL_PATH:-${CPP_PERF_MODEL_DEFAULTS[0]}}"
 readonly MODEL_NAME="${CPP_MODEL_NAME:-${CPP_PERF_MODEL_DEFAULTS[2]}}"
 readonly NPU_DEVICES="${CPP_NPU_DEVICES:-8,9,10,11,12,13,14,15}"
 readonly NEED_TIMING="${CPP_NEED_TIMING:-true}"
+readonly AISBENCH_AUTO_TOOLS_ROOT="${CPP_AISBENCH_AUTO_TOOLS_ROOT:-${PROJECT_ROOT}/deps/aisbench_auto_tools_prefix}"
 readonly CPP_ARTIFACT_ROOT="${CPP_ARTIFACT_ROOT:-${PROJECT_ROOT}/artifacts/cpp}"
 
 source "${CPP_ROOT}/scripts/lib/artifacts.sh"
@@ -42,6 +43,7 @@ while read -r runner dynamic execution_mode dataset extra; do
         case_count=$((case_count + 1))
         if ! env \
             CPP_NEED_TIMING="${NEED_TIMING}" \
+            CPP_AISBENCH_AUTO_TOOLS_ROOT="${AISBENCH_AUTO_TOOLS_ROOT}" \
             CPP_RUNNER="${runner}" \
             CPP_DYNAMIC="${dynamic}" \
             CPP_EXECUTION_MODE="${execution_mode}" \
