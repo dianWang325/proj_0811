@@ -16,6 +16,16 @@ readonly MODEL_NAME="${CPP_MODEL_NAME:-${CPP_PERF_MODEL_DEFAULTS[2]}}"
 readonly MAX_MODEL_LEN="${CPP_MAX_MODEL_LEN:-${CPP_PERF_MODEL_DEFAULTS[3]}}"
 readonly PIPELINE_PARALLEL_SIZE="${CPP_PIPELINE_PARALLEL_SIZE:-${CPP_PERF_MODEL_DEFAULTS[4]}}"
 readonly TENSOR_PARALLEL_SIZE="${CPP_TENSOR_PARALLEL_SIZE:-${CPP_PERF_MODEL_DEFAULTS[5]}}"
+readonly MODEL_ID="${CPP_MODEL_ID:-${CPP_PERF_MODEL_DEFAULTS[6]}}"
+readonly MODEL_FAMILY="${CPP_MODEL_FAMILY:-${CPP_PERF_MODEL_DEFAULTS[7]}}"
+readonly TOKENIZER_PATH="${CPP_TOKENIZER_PATH:-${CPP_PERF_MODEL_DEFAULTS[8]:-${MODEL_PATH}}}"
+readonly TOKENIZER_MODE="${CPP_TOKENIZER_MODE:-${CPP_PERF_MODEL_DEFAULTS[9]}}"
+readonly TOKENIZER_TRUST_REMOTE_CODE="${CPP_TOKENIZER_TRUST_REMOTE_CODE:-${CPP_PERF_MODEL_DEFAULTS[10]}}"
+readonly QUANTIZATION="${CPP_QUANTIZATION-${CPP_PERF_MODEL_DEFAULTS[11]}}"
+readonly SAFETENSORS_LOAD_STRATEGY="${CPP_SAFETENSORS_LOAD_STRATEGY:-${CPP_PERF_MODEL_DEFAULTS[12]}}"
+readonly GPU_MEMORY_UTILIZATION="${CPP_GPU_MEMORY_UTILIZATION:-0.90}"
+readonly KV_CACHE_MEMORY="${CPP_KV_CACHE_MEMORY:-}"
+readonly ENABLE_EXPERT_PARALLEL="${CPP_ENABLE_EXPERT_PARALLEL:-0}"
 readonly DYNAMIC="${CPP_DYNAMIC:-1}"
 readonly WARMUP_COUNT="${CPP_WARMUP_COUNT:-${CPP_PERF_SUITE_DEFAULTS[0]}}"
 readonly MAX_OUTPUT_TOKENS="${CPP_MAX_OUTPUT_TOKENS:-${CPP_PERF_SUITE_DEFAULTS[1]}}"
@@ -56,11 +66,14 @@ else
 fi
 readonly PREFIX_REPEAT_RATE="${CPP_PREFIX_REPEAT_RATE:-${CPP_PERF_SUITE_DEFAULTS[22]}}"
 readonly PREFIX_TEST="${CPP_PREFIX_TEST:-${CPP_PERF_SUITE_DEFAULTS[23]}}"
+readonly API_MODE="${CPP_API_MODE:-${CPP_PERF_SUITE_DEFAULTS[27]}}"
+readonly PROMPT_MODE="${CPP_PROMPT_MODE:-${CPP_PERF_SUITE_DEFAULTS[28]}}"
 readonly STARTUP_TIMEOUT="${CPP_STARTUP_TIMEOUT:-3600}"
 readonly REQUEST_TIMEOUT="${CPP_REQUEST_TIMEOUT:-7200}"
 readonly HCCL_PORT_RANGE="${CPP_HCCL_PORT_RANGE:-17000-17100}"
 readonly CPP_ARTIFACT_ROOT="${CPP_ARTIFACT_ROOT:-${PROJECT_ROOT}/artifacts/cpp}"
 readonly CASE_ID="${RUNNER}_cpp${DYNAMIC}_${EXECUTION_MODE}_${PERF_DATASET}_${DATA_GENERATOR}_pp${PIPELINE_PARALLEL_SIZE}_tp${TENSOR_PARALLEL_SIZE}"
+export CPP_EFFECTIVE_TOKENIZER_TRUST_REMOTE_CODE="${TOKENIZER_TRUST_REMOTE_CODE}"
 
 source "${CPP_ROOT}/scripts/lib/artifacts.sh"
 source "${CPP_ROOT}/scripts/lib/server.sh"
@@ -90,6 +103,43 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
+run_model_preflight() {
+    local scope="$1"
+    local -a args=(
+        "${scope}"
+        --model-config "${MODEL_CONFIG}"
+        --suite-config "${SUITE_CONFIG}"
+        --artifact-root "${CPP_ARTIFACT_ROOT}"
+        --project-root "${PROJECT_ROOT}"
+        --model-path "${MODEL_PATH}"
+        --tokenizer-path "${TOKENIZER_PATH}"
+        --tokenizer-mode "${TOKENIZER_MODE}"
+        --tokenizer-trust-remote-code "${TOKENIZER_TRUST_REMOTE_CODE}"
+        --max-model-len "${MAX_MODEL_LEN}"
+        --pipeline-parallel-size "${PIPELINE_PARALLEL_SIZE}"
+        --tensor-parallel-size "${TENSOR_PARALLEL_SIZE}"
+        --npu-devices "${NPU_DEVICES}"
+        --quantization "${QUANTIZATION}"
+        --safetensors-load-strategy "${SAFETENSORS_LOAD_STRATEGY}"
+    )
+    if [[ "${scope}" == "global" ]]; then
+        args+=(--dataset "${PERF_DATASET}")
+    else
+        args+=(
+            --execution-mode "${EXECUTION_MODE}"
+            --prefix-cache-enabled "${PREFIX_CACHE_ENABLED}"
+            --enable-expert-parallel "${ENABLE_EXPERT_PARALLEL}"
+            --api-mode "${API_MODE}"
+            --prompt-mode "${PROMPT_MODE}"
+        )
+    fi
+    python3 "${CPP_ROOT}/configuration/performance.py" "${args[@]}"
+}
+
+if [[ "${CPP_GLOBAL_PREFLIGHT_DONE:-0}" != "1" ]]; then
+    run_model_preflight global
+fi
+run_model_preflight case
 cpp_perf_validate_server_inputs
 if [[ "${PERF_DATASET}" == "fixed" ]]; then
     [[ "${REQUEST_COUNT}" -eq 5 ]] || cpp_fail "fixed performance request count must be 5"
@@ -114,6 +164,8 @@ fi
     cpp_fail "CPP_PREFIX_CACHE_ENABLED must be 0 or 1"
 [[ "${NEED_TIMING}" == "true" || "${NEED_TIMING}" == "false" ]] || \
     cpp_fail "CPP_NEED_TIMING must be true or false"
+[[ "${ENABLE_EXPERT_PARALLEL}" == "0" || "${ENABLE_EXPERT_PARALLEL}" == "1" ]] || \
+    cpp_fail "CPP_ENABLE_EXPERT_PARALLEL must be 0 or 1"
 if [[ "${MANUAL_WARMUP_ENABLED}" == "1" ]]; then
     [[ "${WARMUP_COUNT}" -gt 0 ]] || cpp_fail "warmup count must be positive"
 fi
@@ -129,7 +181,7 @@ case_dir="${CPP_RUN_DIR}/cases/${CASE_ID}"
 cpp_initialize_performance_case "${case_dir}" "${CASE_ID}"
 server_pid_file="${case_dir}/server.pid"
 
-export PYTHONPATH="${PROJECT_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
+export PYTHONPATH="${PROJECT_ROOT}/deps/vllm:${PROJECT_ROOT}/deps/vllm-ascend:${PROJECT_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 case_stage="generating_dataset"
 mkdir -p "${CPP_RUN_DIR}/datasets"
 dataset_variant="prefix${PREFIX_CACHE_ENABLED}_${PREFIX_REPEAT_RATE//%/pct}"
@@ -141,8 +193,9 @@ generate_performance_dataset() {
     local seed="$1" output="$2" metadata="$3" log="$4" disjoint_from="${5:-}"
     local -a generation_args=(
         --backend "${DATA_GENERATOR}"
-        --model-path "${MODEL_PATH}"
+        --model-path "${TOKENIZER_PATH}"
         --performance-dataset "${PERF_DATASET}"
+        --suite-config "${SUITE_CONFIG}"
         --output-tokens "${MAX_OUTPUT_TOKENS}"
         --seed "${seed}"
         --aisbench-auto-tools-root "${AISBENCH_AUTO_TOOLS_ROOT}"
@@ -206,7 +259,7 @@ run_distribution_warmup() {
         --mode warmup \
         --dataset-mode "${MANUAL_WARMUP_DATASET_MODE}" \
         --dataset "${PERF_DATASET}" \
-        --model-path "${MODEL_PATH}" \
+        --model-path "${TOKENIZER_PATH}" \
         --model-name "${MODEL_NAME}" \
         --port "${SERVER_PORT}" \
         --count "${count}" \
@@ -229,7 +282,7 @@ if [[ "${PREFIX_CACHE_ENABLED}" == "1" && "${PREFIX_TEST}" == "1" ]]; then
     python3 "${CPP_ROOT}/workloads/performance/prepare.py" \
         --mode prefix-prime \
         --dataset "${PERF_DATASET}" \
-        --model-path "${MODEL_PATH}" \
+        --model-path "${TOKENIZER_PATH}" \
         --model-name "${MODEL_NAME}" \
         --port "${SERVER_PORT}" \
         --timeout "${REQUEST_TIMEOUT}" \
@@ -244,7 +297,7 @@ if [[ "${EXECUTION_MODE}" == "graph" ]]; then
     python3 "${CPP_ROOT}/workloads/performance/prepare.py" \
         --mode graph-probe \
         --dataset "${PERF_DATASET}" \
-        --model-path "${MODEL_PATH}" \
+        --model-path "${TOKENIZER_PATH}" \
         --model-name "${MODEL_NAME}" \
         --port "${SERVER_PORT}" \
         --timeout "${REQUEST_TIMEOUT}" \
@@ -260,6 +313,7 @@ python3 "${CPP_ROOT}/workloads/performance/render_aisbench_config.py" \
     --dataset "${PERF_DATASET}" \
     --model-path "${MODEL_PATH}" \
     --model-name "${MODEL_NAME}" \
+    --suite-config "${SUITE_CONFIG}" \
     --port "${SERVER_PORT}" \
     --concurrency "${CONCURRENCY}" \
     --request-rate "${REQUEST_RATE}" \
@@ -285,6 +339,7 @@ validator_args=(
     --tp-size "${TENSOR_PARALLEL_SIZE}"
     --data-generator "${DATA_GENERATOR}"
     --dataset-metadata "${case_dir}/raw/dataset_metadata.json"
+    --suite-config "${SUITE_CONFIG}"
     --output "${case_dir}/results/performance_result.json"
 )
 if [[ "${MANUAL_WARMUP_ENABLED}" == "1" ]]; then

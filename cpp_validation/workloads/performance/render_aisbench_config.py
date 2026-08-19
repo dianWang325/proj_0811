@@ -19,6 +19,7 @@ def main() -> int:
     parser.add_argument("--dataset", choices=("fixed", "variable"), required=True)
     parser.add_argument("--model-path", required=True)
     parser.add_argument("--model-name", required=True)
+    parser.add_argument("--suite-config", required=True)
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--concurrency", type=int, required=True)
     parser.add_argument("--request-rate", type=float, required=True)
@@ -30,6 +31,7 @@ def main() -> int:
         "@@CPP_DATASET@@": escaped_string(args.dataset),
         "@@CPP_MODEL_PATH@@": escaped_string(args.model_path),
         "@@CPP_MODEL_NAME@@": escaped_string(args.model_name),
+        "@@CPP_SUITE_CONFIG@@": escaped_string(args.suite_config),
         '"@@CPP_PORT@@"': str(args.port),
         '"@@CPP_CONCURRENCY@@"': str(args.concurrency),
         '"@@CPP_REQUEST_RATE@@"': repr(args.request_rate),

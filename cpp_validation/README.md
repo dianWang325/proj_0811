@@ -83,6 +83,14 @@ the selected files with `CPP_MODEL_CONFIG`, `CPP_SUITE_CONFIG`, and
 
 ## Performance matrix
 
+Performance model profiles use schema v2. Model-owned fields (`model_id`,
+paths, served name, family, tokenizer, quantization, weight loading, and
+capability constraints) live in `configs/models`. Test-owned fields retain
+their existing `CPP_*` override paths and defaults; `max_model_len`, PP, TP,
+API, and prompt mode are sourced from `configs/suites/performance.json`.
+Legacy model JSON remains readable during migration and emits a deprecation
+notice when its PP, TP, or maximum-length fallback is used.
+
 Run one performance case on PP=2/TP=4 (eight NPUs):
 
 ```bash
@@ -101,6 +109,15 @@ Run the complete five-configuration by two-dataset matrix:
 CPP_NPU_DEVICES=8,9,10,11,12,13,14,15 \
 ./proj_0811/cpp_validation/bin/cpp-test perf-matrix
 ```
+
+Before a matrix creates its run directory, one global preflight validates the
+selected model/tokenizer, context limits, PP/TP/device count, quantization, and
+weight loader. It does not scan matrix rows. Each row checks Graph/Eager,
+prefix cache, expert parallel, API/prompt, and tokenizer compatibility only
+when that case is about to run. A conflict exits with status 78, writes
+`artifacts/cpp/conflicts/<model_id>__<config_key>__<timestamp>.log`, and stops
+the remaining matrix without creating the conflicting case. Conflicts are
+never repaired or bypassed automatically.
 
 `CPP_NEED_TIMING=true|false` controls `profiling_chunk_config.need_timing`
 for CPP-enabled performance cases and defaults to `true`. The selected value
@@ -185,6 +202,16 @@ artifacts/cpp/runs/<run-id>/
 run-level summaries and may gain versioned re-analysis subdirectories later.
 `artifacts/cpp/LATEST` contains the most recently created run ID for
 convenience; it is not a durable identifier.
+
+New performance artifacts use metadata schema v2 and include
+`effective_model_config.json` plus `effective_test_config.json` beside
+`run.json`. Performance run IDs insert the stable model ID after `perf_matrix`
+(or `perf_case`) and before the timestamp. An explicit `CPP_RUN_ID` is treated
+as the base ID; the model ID is inserted once, while `run.json.base_run_id`
+preserves the requested value. `LATEST`, `run.json.run_id`, and the run
+directory all use the effective ID. Existing control-directory names and
+historical `perf_matrix_logs/` archives are unchanged. Analysis remains
+compatible with historical schema-v1 runs.
 
 Historical outputs migrated from `smoke_test` are under
 `artifacts/cpp/legacy`. Files whose original case cannot be proven remain under

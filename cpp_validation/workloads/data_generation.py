@@ -25,6 +25,10 @@ DEFAULT_AISBENCH_AUTO_TOOLS_ROOT = Path(
 )
 
 
+def tokenizer_trust_remote_code() -> bool:
+    return os.environ.get("CPP_EFFECTIVE_TOKENIZER_TRUST_REMOTE_CODE", "1") == "1"
+
+
 @contextlib.contextmanager
 def working_directory(path: Path) -> Iterator[None]:
     previous = Path.cwd()
@@ -149,7 +153,7 @@ def apply_shared_prefix(
     tokenizer = AutoTokenizer.from_pretrained(
         model_path,
         local_files_only=True,
-        trust_remote_code=True,
+        trust_remote_code=tokenizer_trust_remote_code(),
     )
     prefix_lengths = [int(round(length * repeat_rate)) for length in lengths]
     max_prefix_length = max(prefix_lengths)
@@ -181,7 +185,7 @@ def validate_shared_prefixes(
     tokenizer = AutoTokenizer.from_pretrained(
         model_path,
         local_files_only=True,
-        trust_remote_code=True,
+        trust_remote_code=tokenizer_trust_remote_code(),
     )
     encoded = [
         tokenizer.encode(prompt, add_special_tokens=False) for prompt in prompts
@@ -225,7 +229,7 @@ def validate_prompts(model_path: str, prompts: list[str], lengths: list[int]) ->
     tokenizer = AutoTokenizer.from_pretrained(
         model_path,
         local_files_only=True,
-        trust_remote_code=True,
+        trust_remote_code=tokenizer_trust_remote_code(),
     )
     actual_lengths = [
         len(tokenizer.encode(prompt, add_special_tokens=False)) for prompt in prompts
@@ -271,7 +275,7 @@ def validate_dataset_isolation(
     tokenizer = AutoTokenizer.from_pretrained(
         model_path,
         local_files_only=True,
-        trust_remote_code=True,
+        trust_remote_code=tokenizer_trust_remote_code(),
     )
     anchor_index = max(range(len(prefix_lengths)), key=prefix_lengths.__getitem__)
     prefix_length = prefix_lengths[anchor_index]
@@ -295,7 +299,7 @@ def repair_aisbench_prompt_lengths(
     tokenizer = AutoTokenizer.from_pretrained(
         model_path,
         local_files_only=True,
-        trust_remote_code=True,
+        trust_remote_code=tokenizer_trust_remote_code(),
     )
     filler = None
     for candidate in (" hello", " world", " test", " A", " B"):
@@ -469,7 +473,7 @@ def parse_lengths(args: argparse.Namespace) -> list[int]:
             performance_input_lengths,
         )
 
-        return performance_input_lengths(args.performance_dataset)
+        return performance_input_lengths(args.performance_dataset, args.suite_config)
     if not args.lengths:
         raise ValueError("either --performance-dataset or --lengths is required")
     return [int(value) for value in args.lengths.split(",")]
@@ -480,6 +484,7 @@ def main() -> int:
     parser.add_argument("--backend", choices=SUPPORTED_BACKENDS, default=DEFAULT_BACKEND)
     parser.add_argument("--model-path", required=True)
     parser.add_argument("--performance-dataset", choices=("fixed", "variable"))
+    parser.add_argument("--suite-config", type=Path)
     parser.add_argument("--lengths", help="comma-separated functional input lengths")
     parser.add_argument("--output-tokens", type=int, default=1)
     parser.add_argument("--seed", type=int, default=811)

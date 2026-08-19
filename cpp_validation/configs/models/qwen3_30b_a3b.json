@@ -1,6 +1,30 @@
 {
+  "schema_version": 2,
+  "model_id": "qwen3-30b-a3b-w8a8",
+  "model_family": "qwen",
   "model_path": "/mnt/a800_weight/Qwen3-30B-A3B-W8A8",
+  "fallback_model_path": "",
   "served_model_name": "qwen3-30b-a3b-w8a8",
+  "tokenizer": {
+    "path": null,
+    "mode": "auto",
+    "trust_remote_code": true
+  },
+  "quantization": "ascend",
+  "weight_loading": {
+    "safetensors_load_strategy": "auto",
+    "allowed_safetensors_load_strategies": ["auto", "prefetch", "lazy"]
+  },
+  "constraints": {
+    "max_context_tokens": 49152,
+    "model_kind": "moe",
+    "supported_execution_modes": ["eager"],
+    "supports_prefix_cache": true,
+    "supported_api_modes": ["completions"],
+    "supported_prompt_modes": ["raw"],
+    "supported_tokenizer_modes": ["auto"]
+  },
   "max_model_len": 49152,
-  "pipeline_parallel_size": 2
+  "pipeline_parallel_size": 2,
+  "tensor_parallel_size": 4
 }

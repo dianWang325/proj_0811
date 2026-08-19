@@ -89,6 +89,13 @@ def test_performance_load_uses_requested_pressure_without_changing_lengths():
         "request_count": 30,
         "seed_offset": 1,
     }
+    assert suite["serving"] == {
+        "max_model_len": 132000,
+        "pipeline_parallel_size": 2,
+        "tensor_parallel_size": 4,
+        "api_mode": "completions",
+        "prompt_mode": "raw",
+    }
     assert suite["fixed"]["input_tokens"] == 131072
     assert suite["fixed"]["request_count"] == 5
     assert suite["fixed"]["concurrency"] == 1
@@ -133,10 +140,49 @@ def test_shell_loader_exposes_dataset_specific_tuning():
     )
     values = completed.stdout.splitlines()
 
-    assert len(values) == 24
+    assert len(values) == 29
     assert values[3:7] == ["5", "1", "0", "32768"]
     assert values[10:14] == ["64", "4", "0", "20480"]
-    assert values[16:] == ["auto", "generated", "1", "0.8", "0", "1", "90%", "1"]
+    assert values[16:24] == [
+        "auto", "generated", "1", "0.8", "0", "1", "90%", "1"
+    ]
+    assert values[24:] == ["132000", "2", "4", "completions", "raw"]
+
+
+def test_shell_loader_separates_model_and_test_defaults():
+    common = PROJECT_ROOT / "cpp_validation" / "scripts" / "lib" / "common.sh"
+    loader = PROJECT_ROOT / "cpp_validation" / "scripts" / "lib" / "config.sh"
+    model = (
+        PROJECT_ROOT
+        / "cpp_validation"
+        / "configs"
+        / "models"
+        / "deepseek_v4_flash.json"
+    )
+    suite = (
+        PROJECT_ROOT / "cpp_validation" / "configs" / "suites" / "performance.json"
+    )
+    command = (
+        f"source {common}; source {loader}; "
+        f"cpp_load_performance_config_defaults {model} {suite}; "
+        "printf '<%s>\\n' \"${CPP_PERF_MODEL_DEFAULTS[@]}\""
+    )
+    completed = subprocess.run(
+        ["bash", "-c", command], check=True, capture_output=True, text=True
+    )
+    values = [line[1:-1] for line in completed.stdout.splitlines()]
+
+    assert len(values) == 13
+    assert values[3:6] == ["132000", "2", "4"]
+    assert values[6:13] == [
+        "deepseek-v4-flash-w4a8",
+        "deepseek",
+        "",
+        "deepseek_v4",
+        "1",
+        "ascend",
+        "auto",
+    ]
 
 
 def test_summary_compares_mrv2_cpp_on_with_same_runner_cpp_off():

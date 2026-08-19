@@ -2,6 +2,13 @@
   "suite": "performance",
   "data_generator": "aisbench",
   "max_output_tokens": 1,
+  "serving": {
+    "max_model_len": 132000,
+    "pipeline_parallel_size": 2,
+    "tensor_parallel_size": 4,
+    "api_mode": "completions",
+    "prompt_mode": "raw"
+  },
   "cpp": {
     "smooth_factor": 0.8
   },
@@ -25,6 +32,7 @@
     "min_input_tokens": 4096,
     "max_input_tokens": 65536,
     "mean_input_tokens": 32768,
+    "step_tokens": 4096,
     "request_count": 64,
     "concurrency": 4,
     "request_rate": 0,

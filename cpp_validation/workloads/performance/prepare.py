@@ -15,6 +15,7 @@ from cpp_validation.workloads.performance.dataset import (
     ExactPromptFactory,
     load_generated_records,
     performance_input_lengths,
+    tokenizer_trust_remote_code,
 )
 
 TRACE_PATTERN = re.compile(r"\[CPP_EXECUTION_MODE_TRACE\]\s+(\{.*\})")
@@ -168,7 +169,9 @@ def main() -> int:
         from transformers import AutoTokenizer
 
         tokenizer = AutoTokenizer.from_pretrained(
-            args.model_path, local_files_only=True, trust_remote_code=True
+            args.model_path,
+            local_files_only=True,
+            trust_remote_code=tokenizer_trust_remote_code(),
         )
         full_ids = tokenizer.encode(
             generated[index]["question"], add_special_tokens=False

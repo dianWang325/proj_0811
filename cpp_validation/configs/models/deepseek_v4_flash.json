@@ -1,7 +1,29 @@
 {
+  "schema_version": 2,
+  "model_id": "deepseek-v4-flash-w4a8",
+  "model_family": "deepseek",
   "model_path": "/mnt/a800_weight/DeepSeek-V4-Flash-w4a8",
   "fallback_model_path": "/mnt/a800_weight/DeepSeek-V4-Flash-w8a8-mtp",
   "served_model_name": "deepseek-v4-flash",
+  "tokenizer": {
+    "path": null,
+    "mode": "deepseek_v4",
+    "trust_remote_code": true
+  },
+  "quantization": "ascend",
+  "weight_loading": {
+    "safetensors_load_strategy": "auto",
+    "allowed_safetensors_load_strategies": ["auto", "prefetch", "lazy"]
+  },
+  "constraints": {
+    "max_context_tokens": 132000,
+    "model_kind": "moe",
+    "supported_execution_modes": ["eager", "graph"],
+    "supports_prefix_cache": true,
+    "supported_api_modes": ["completions"],
+    "supported_prompt_modes": ["raw"],
+    "supported_tokenizer_modes": ["deepseek_v4", "auto"]
+  },
   "max_model_len": 132000,
   "pipeline_parallel_size": 2,
   "tensor_parallel_size": 4

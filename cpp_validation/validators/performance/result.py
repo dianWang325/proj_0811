@@ -10,7 +10,10 @@ import re
 from pathlib import Path
 from typing import Any
 
-from cpp_validation.workloads.performance.dataset import performance_input_lengths
+from cpp_validation.workloads.performance.dataset import (
+    load_performance_suite,
+    performance_input_lengths,
+)
 
 TRACE_PATTERN = re.compile(r"\[CPP_EXECUTION_MODE_TRACE\]\s+(\{.*\})")
 
@@ -124,10 +127,12 @@ def validate_case(
     warmup_dataset_mode: str | None = None,
     warmup_dataset_metadata: Path | None = None,
     prefix_prime: Path | None = None,
+    suite_config: Path | None = None,
 ) -> tuple[dict, list[str]]:
     errors = []
     metrics = load_aisbench_metrics(aisbench_root, dataset)
-    expected_lengths = performance_input_lengths(dataset)
+    suite = load_performance_suite(suite_config)
+    expected_lengths = performance_input_lengths(dataset, suite_config)
     expected_input_tokens = sum(expected_lengths)
     generation_metadata = None
     if dataset_metadata is not None:
@@ -146,7 +151,8 @@ def validate_case(
             if generation_metadata.get("input_token_lengths") != expected_lengths:
                 errors.append("generated input token lengths violate the suite contract")
             prefix_metadata = generation_metadata.get("prefix_cache", {})
-            expected_prefix_cache = dataset == "variable"
+            expected_prefix = suite[dataset].get("prefix_cache", {})
+            expected_prefix_cache = bool(expected_prefix.get("enabled", False))
             if prefix_metadata.get("enabled") is not expected_prefix_cache:
                 errors.append(
                     "generated prefix-cache mode violates the suite contract: "
@@ -154,14 +160,20 @@ def validate_case(
                     f"actual={prefix_metadata.get('enabled')}"
                 )
             if expected_prefix_cache:
+                configured_repeat = str(expected_prefix.get("repeat_rate", "0"))
+                expected_ratio = (
+                    float(configured_repeat[:-1]) / 100.0
+                    if configured_repeat.endswith("%")
+                    else float(configured_repeat)
+                )
                 if abs(
                     float(prefix_metadata.get("mean_planned_prefix_hit_ratio", 0.0))
-                    - 0.9
+                    - expected_ratio
                 ) > 1e-4:
-                    errors.append("variable dataset planned prefix-hit ratio is not 90%")
+                    errors.append("dataset planned prefix-hit ratio violates the suite contract")
                 if float(
                     prefix_metadata.get("mean_cacheable_prefix_hit_ratio", 0.0)
-                ) < 0.89:
+                ) < max(0.0, expected_ratio - 0.01):
                     errors.append(
                         "variable dataset cacheable prefix-hit ratio is below 89%"
                     )
@@ -417,6 +429,7 @@ def main() -> int:
     parser.add_argument("--graph-probe", type=Path)
     parser.add_argument("--data-generator", choices=("aisbench", "script"), default="script")
     parser.add_argument("--dataset-metadata", type=Path)
+    parser.add_argument("--suite-config", type=Path)
     parser.add_argument("--manual-warmup", type=Path)
     parser.add_argument("--warmup-count", type=int)
     parser.add_argument(
@@ -444,6 +457,7 @@ def main() -> int:
         warmup_dataset_mode=args.warmup_dataset_mode,
         warmup_dataset_metadata=args.warmup_dataset_metadata,
         prefix_prime=args.prefix_prime,
+        suite_config=args.suite_config,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")

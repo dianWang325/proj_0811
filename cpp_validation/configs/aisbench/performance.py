@@ -19,6 +19,7 @@ port = "@@CPP_PORT@@"
 concurrency = "@@CPP_CONCURRENCY@@"
 request_rate = "@@CPP_REQUEST_RATE@@"
 dataset_path = "@@CPP_DATASET_PATH@@"
+suite_config = "@@CPP_SUITE_CONFIG@@"
 
 models = [
     dict(
@@ -64,6 +65,7 @@ datasets = [
             dataset_name=dataset_name,
             dataset_path=dataset_path,
             model_path=model_path,
+            suite_config=suite_config,
         ),
         reader_cfg=reader_cfg,
         infer_cfg=infer_cfg,

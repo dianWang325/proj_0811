@@ -27,16 +27,24 @@ cpp_perf_validate_server_inputs() {
 cpp_perf_start_server() {
     local log_file="$1" compiler_dir="$2" runner_v2=0
     local need_timing="${NEED_TIMING:-${CPP_NEED_TIMING:-true}}"
-    local tokenizer_mode="${CPP_TOKENIZER_MODE:-deepseek_v4}"
-    local enable_expert_parallel="${CPP_ENABLE_EXPERT_PARALLEL:-0}"
-    local gpu_memory_utilization="${CPP_GPU_MEMORY_UTILIZATION:-0.90}"
+    local tokenizer_mode="${TOKENIZER_MODE}"
+    local tokenizer_path="${TOKENIZER_PATH}"
+    local tokenizer_trust_remote_code="${TOKENIZER_TRUST_REMOTE_CODE}"
+    local quantization="${QUANTIZATION}"
+    local enable_expert_parallel="${ENABLE_EXPERT_PARALLEL}"
+    local gpu_memory_utilization="${GPU_MEMORY_UTILIZATION}"
     local max_num_batched_tokens="${CPP_MAX_NUM_BATCHED_TOKENS:-${MAX_NUM_BATCHED_TOKENS}}"
-    local safetensors_load_strategy="${CPP_SAFETENSORS_LOAD_STRATEGY:-auto}"
-    local kv_cache_memory="${CPP_KV_CACHE_MEMORY:-}"
+    local safetensors_load_strategy="${SAFETENSORS_LOAD_STRATEGY}"
+    local kv_cache_memory="${KV_CACHE_MEMORY}"
     local additional_config='{"enable_cpu_binding":false}'
     local -a execution_args=(--enforce-eager)
     local -a prefix_cache_args=(--no-enable-prefix-caching)
     local -a model_args=(--tokenizer-mode "${tokenizer_mode}")
+    [[ -z "${tokenizer_path}" || "${tokenizer_path}" == "${MODEL_PATH}" ]] || \
+        model_args+=(--tokenizer "${tokenizer_path}")
+    [[ "${tokenizer_trust_remote_code}" == "0" ]] || \
+        model_args+=(--trust-remote-code)
+    [[ -z "${quantization}" ]] || model_args+=(--quantization "${quantization}")
     [[ -z "${kv_cache_memory}" ]] || model_args+=(--kv-cache-memory "${kv_cache_memory}")
     [[ "${enable_expert_parallel}" == "0" || \
        "${enable_expert_parallel}" == "1" ]] || \
@@ -75,9 +83,7 @@ cpp_perf_start_server() {
         --enable-chunked-prefill \
         "${prefix_cache_args[@]}" \
         --no-async-scheduling \
-        --quantization ascend \
         --safetensors-load-strategy "${safetensors_load_strategy}" \
-        --trust-remote-code \
         "${model_args[@]}" \
         --block-size 32 \
         "${execution_args[@]}" \
