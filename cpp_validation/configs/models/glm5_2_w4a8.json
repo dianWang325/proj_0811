@@ -1,0 +1,8 @@
+{
+  "model_path": "/mnt/weight/GLM-5.2-Provide-0610-W4A8",
+  "fallback_model_path": "/mnt/weight/GLM-5.2-W4A8C8-0702",
+  "served_model_name": "glm-5.2-w4a8",
+  "max_model_len": 131104,
+  "pipeline_parallel_size": 2,
+  "tensor_parallel_size": 4
+}

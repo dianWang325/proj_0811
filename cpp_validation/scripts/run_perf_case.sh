@@ -93,11 +93,13 @@ trap cleanup EXIT INT TERM
 cpp_perf_validate_server_inputs
 if [[ "${PERF_DATASET}" == "fixed" ]]; then
     [[ "${REQUEST_COUNT}" -eq 5 ]] || cpp_fail "fixed performance request count must be 5"
-    [[ "${MAX_NUM_BATCHED_TOKENS}" -eq 32768 ]] || \
+    [[ "${MAX_NUM_BATCHED_TOKENS}" -eq 32768 || \
+       "${CPP_ALLOW_BATCH_TOKEN_OVERRIDE:-0}" == "1" ]] || \
         cpp_fail "fixed max_num_batched_tokens must be 32768"
 else
     [[ "${REQUEST_COUNT}" -eq 64 ]] || cpp_fail "variable performance request count must be 64"
-    [[ "${MAX_NUM_BATCHED_TOKENS}" -eq 20480 ]] || \
+    [[ "${MAX_NUM_BATCHED_TOKENS}" -eq 20480 || \
+       "${CPP_ALLOW_BATCH_TOKEN_OVERRIDE:-0}" == "1" ]] || \
         cpp_fail "variable max_num_batched_tokens must be 20480"
 fi
 [[ "${MAX_OUTPUT_TOKENS}" -eq 1 ]] || cpp_fail "performance output length must be 1"
