@@ -243,7 +243,8 @@ cpp_initialize_performance_case() {
         "${MANUAL_WARMUP_ENABLED}" "${MANUAL_WARMUP_ENABLED_CONFIG}" \
         "${MANUAL_WARMUP_DATASET_MODE}" "${MANUAL_WARMUP_SEED}" \
         "${PREFIX_CACHE_ENABLED}" "${PREFIX_REPEAT_RATE}" "${PREFIX_TEST}" \
-        "${CPP_SMOOTH_FACTOR}" "${NEED_TIMING}" "${MODEL_ID}" \
+        "${CPP_SMOOTH_FACTOR}" "${NEED_TIMING}" "${ASYNC_SCHEDULING}" \
+        "${MODEL_ID}" \
         "${MODEL_FAMILY}" "${TOKENIZER_PATH}" "${TOKENIZER_MODE}" \
         "${TOKENIZER_TRUST_REMOTE_CODE}" "${QUANTIZATION}" \
         "${GPU_MEMORY_UTILIZATION}" "${KV_CACHE_MEMORY}" \
@@ -260,7 +261,7 @@ from pathlib import Path
     request_rate, max_output_tokens, data_generator, manual_warmup_enabled,
     manual_warmup_enabled_config, manual_warmup_dataset_mode,
     manual_warmup_seed, prefix_cache_enabled, prefix_repeat_rate,
-    prefix_test, smooth_factor, need_timing,
+    prefix_test, smooth_factor, need_timing, async_scheduling,
     model_id, model_family, tokenizer_path, tokenizer_mode,
     tokenizer_trust_remote_code, quantization, gpu_memory_utilization,
     kv_cache_memory, expert_parallel, safetensors_load_strategy,
@@ -274,6 +275,7 @@ data = {
     "cpp_mode": "dynamic" if dynamic == "1" else "static",
     "dynamic": dynamic == "1",
     "execution_mode": execution_mode,
+    "async_scheduling": async_scheduling == "1",
     "configured_cudagraph_mode": (
         "FULL_DECODE_ONLY" if execution_mode == "graph" else "NONE"
     ),

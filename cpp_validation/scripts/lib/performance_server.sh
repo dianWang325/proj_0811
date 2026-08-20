@@ -36,9 +36,12 @@ cpp_perf_start_server() {
     local max_num_batched_tokens="${CPP_MAX_NUM_BATCHED_TOKENS:-${MAX_NUM_BATCHED_TOKENS}}"
     local safetensors_load_strategy="${SAFETENSORS_LOAD_STRATEGY}"
     local kv_cache_memory="${KV_CACHE_MEMORY}"
+    local async_scheduling="${ASYNC_SCHEDULING:-${CPP_ASYNC_SCHEDULING:-0}}"
     local additional_config='{"enable_cpu_binding":false}'
     local -a execution_args=(--enforce-eager)
     local -a prefix_cache_args=(--no-enable-prefix-caching)
+    local -a async_scheduling_args=(--no-async-scheduling)
+    local -a load_strategy_args=()
     local -a model_args=(--tokenizer-mode "${tokenizer_mode}")
     [[ -z "${tokenizer_path}" || "${tokenizer_path}" == "${MODEL_PATH}" ]] || \
         model_args+=(--tokenizer "${tokenizer_path}")
@@ -51,6 +54,21 @@ cpp_perf_start_server() {
         cpp_fail "CPP_ENABLE_EXPERT_PARALLEL must be 0 or 1"
     [[ "${enable_expert_parallel}" == "0" ]] || \
         model_args+=(--enable-expert-parallel)
+    [[ "${async_scheduling}" == "0" || "${async_scheduling}" == "1" ]] || \
+        cpp_fail "CPP_ASYNC_SCHEDULING must be 0 or 1"
+    [[ "${async_scheduling}" == "0" ]] || \
+        async_scheduling_args=(--async-scheduling)
+    # The model configuration uses "auto" as the portable logical default.
+    # This vLLM revision has no CLI choice named "auto", so let vLLM select
+    # its own default by omitting the option. Explicit supported strategies
+    # continue to be forwarded unchanged.
+    if [[ -n "${safetensors_load_strategy}" && \
+          "${safetensors_load_strategy}" != "auto" && \
+          "${safetensors_load_strategy}" != "None" ]]; then
+        load_strategy_args=(
+            --safetensors-load-strategy "${safetensors_load_strategy}"
+        )
+    fi
     [[ "${RUNNER}" == "mrv2" ]] && runner_v2=1
     if [[ "${DYNAMIC}" == 1 ]]; then
         [[ "${need_timing}" == "true" || "${need_timing}" == "false" ]] || \
@@ -82,8 +100,8 @@ cpp_perf_start_server() {
         --gpu-memory-utilization "${gpu_memory_utilization}" \
         --enable-chunked-prefill \
         "${prefix_cache_args[@]}" \
-        --no-async-scheduling \
-        --safetensors-load-strategy "${safetensors_load_strategy}" \
+        "${async_scheduling_args[@]}" \
+        "${load_strategy_args[@]}" \
         "${model_args[@]}" \
         --block-size 32 \
         "${execution_args[@]}" \
