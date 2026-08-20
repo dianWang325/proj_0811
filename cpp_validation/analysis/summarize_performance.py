@@ -37,6 +37,9 @@ def comparison(name: str, current: dict, baseline: dict) -> dict:
         "name": name,
         "dataset": current["dataset"],
         "data_generator": current.get("data_generator", "script"),
+        "matrix_round": current.get("matrix_round"),
+        "async_scheduling": current.get("async_scheduling", False),
+        "need_timing": current.get("need_timing"),
         "current_case": current["case_id"],
         "baseline_case": baseline["case_id"],
         "ttft_improvement_percent": ttft_improvement(
@@ -61,49 +64,76 @@ def build_comparisons(complete_cases: list[dict]) -> list[dict]:
             case["cpp_mode"],
             case["execution_mode"],
             case.get("data_generator", "script"),
+            case.get("async_scheduling", False),
+            case.get("matrix_round"),
+            case.get("need_timing") if case["cpp_mode"] == "dynamic" else False,
         ): case
         for case in complete_cases
     }
     comparisons = []
-    generators = sorted(
-        {case.get("data_generator", "script") for case in complete_cases}
-    )
-    for generator in generators:
-        for dataset in ("fixed", "variable"):
-            static_mrv1 = index.get(
-                (dataset, "mrv1", "static", "eager", generator)
-            )
-            cpp_mrv1 = index.get(
-                (dataset, "mrv1", "dynamic", "eager", generator)
-            )
-            static_mrv2 = index.get(
-                (dataset, "mrv2", "static", "eager", generator)
-            )
-            cpp_mrv2 = index.get(
-                (dataset, "mrv2", "dynamic", "eager", generator)
-            )
-            cpp_graph = index.get(
-                (dataset, "mrv2", "dynamic", "graph", generator)
-            )
-            if static_mrv1 and cpp_mrv1:
-                comparisons.append(
-                    comparison("cpp_mrv1_vs_static", cpp_mrv1, static_mrv1)
+    for current in complete_cases:
+        if current["cpp_mode"] != "dynamic":
+            continue
+        dataset = current["dataset"]
+        runner = current["runner"]
+        mode = current["execution_mode"]
+        generator = current.get("data_generator", "script")
+        async_scheduling = current.get("async_scheduling", False)
+        matrix_round = current.get("matrix_round")
+        need_timing = current.get("need_timing")
+        if mode == "eager":
+            static = index.get(
+                (
+                    dataset,
+                    runner,
+                    "static",
+                    "eager",
+                    generator,
+                    async_scheduling,
+                    matrix_round,
+                    False,
                 )
-            if static_mrv2 and cpp_mrv2:
-                comparisons.append(
-                    comparison(
-                        "cpp_mrv2_vs_mrv2_static",
-                        cpp_mrv2,
-                        static_mrv2,
+            )
+            if static:
+                name = (
+                    "cpp_mrv1_vs_static"
+                    if runner == "mrv1"
+                    else "cpp_mrv2_vs_mrv2_static"
+                )
+                comparisons.append(comparison(name, current, static))
+            if runner == "mrv2":
+                cpp_mrv1 = index.get(
+                    (
+                        dataset,
+                        "mrv1",
+                        "dynamic",
+                        "eager",
+                        generator,
+                        async_scheduling,
+                        matrix_round,
+                        need_timing,
                     )
                 )
-            if cpp_mrv1 and cpp_mrv2:
-                comparisons.append(
-                    comparison("cpp_mrv2_vs_mrv1", cpp_mrv2, cpp_mrv1)
+                if cpp_mrv1:
+                    comparisons.append(
+                        comparison("cpp_mrv2_vs_mrv1", current, cpp_mrv1)
+                    )
+        elif runner == "mrv2" and mode == "graph":
+            cpp_eager = index.get(
+                (
+                    dataset,
+                    "mrv2",
+                    "dynamic",
+                    "eager",
+                    generator,
+                    async_scheduling,
+                    matrix_round,
+                    need_timing,
                 )
-            if cpp_mrv2 and cpp_graph:
+            )
+            if cpp_eager:
                 comparisons.append(
-                    comparison("graph_vs_eager_mrv2", cpp_graph, cpp_mrv2)
+                    comparison("graph_vs_eager_mrv2", current, cpp_eager)
                 )
     return comparisons
 
@@ -141,6 +171,9 @@ def main() -> int:
                     "runner": case["runner"],
                     "cpp_mode": case["cpp_mode"],
                     "need_timing": case.get("cpp_tuning", {}).get("need_timing"),
+                    "async_scheduling": case.get("async_scheduling", False),
+                    "matrix_round": case.get("matrix", {}).get("round"),
+                    "matrix_position": case.get("matrix", {}).get("position"),
                     "execution_mode": case["execution_mode"],
                     "data_generator": case.get("data_generator", "script"),
                     "pp": case["pipeline_parallel_size"],
@@ -218,6 +251,9 @@ def main() -> int:
         "runner",
         "cpp_mode",
         "need_timing",
+        "async_scheduling",
+        "matrix_round",
+        "matrix_position",
         "execution_mode",
         "data_generator",
         "pp",
@@ -261,14 +297,17 @@ def main() -> int:
         "",
         f"Cases: {len(cases)}; passed: {len(cases) - failed}; failed/incomplete: {failed}.",
         "",
-        "| Case | Dataset | Generator | Runner | CPP | Need timing | Mode | Load (C/RPS) | TTFT avg/P50/P90/P95 (ms) | Input tok/s | Input tok/s/card | CG config | Profile samples/modes/eager | Inference modes | Probe graph | Isolation | Status |",
-        "|---|---|---|---|---|---|---|---|---|---:|---:|---|---|---|---|---|---|",
+        "| Case | Round/Seq | Dataset | Generator | Runner | CPP | Need timing | Async | Mode | Load (C/RPS) | TTFT avg/P50/P90/P95 (ms) | Input tok/s | Input tok/s/card | CG config | Profile samples/modes/eager | Inference modes | Probe graph | Isolation | Status |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---:|---:|---|---|---|---|---|---|",
     ]
     for case in cases:
         lines.append(
-            f"| {case['case_id']} | {case['dataset']} | {case['data_generator']} "
+            f"| {case['case_id']} "
+            f"| {case['matrix_round']}/{case['matrix_position']} "
+            f"| {case['dataset']} | {case['data_generator']} "
             f"| {case['runner']} "
             f"| {case['cpp_mode']} | {case['need_timing']} "
+            f"| {case['async_scheduling']} "
             f"| {case['execution_mode']} "
             f"| {case['concurrency']}/{case['request_rate']} "
             f"| {case['average_ttft_ms']}/{case['ttft_p50_ms']}/"
@@ -289,13 +328,15 @@ def main() -> int:
                 "",
                 "## Comparisons",
                 "",
-                "| Comparison | Dataset | Generator | TTFT improvement | Input throughput change | Per-card change |",
-                "|---|---|---|---:|---:|---:|",
+                "| Comparison | Round | Async | Need timing | Dataset | Generator | TTFT improvement | Input throughput change | Per-card change |",
+                "|---|---:|---|---|---|---|---:|---:|---:|",
             ]
         )
         for item in comparisons:
             lines.append(
-                f"| {item['name']} | {item['dataset']} | {item['data_generator']} "
+                f"| {item['name']} | {item['matrix_round']} "
+                f"| {item['async_scheduling']} | {item['need_timing']} "
+                f"| {item['dataset']} | {item['data_generator']} "
                 f"| {item['ttft_improvement_percent']}% "
                 f"| {item['input_throughput_change_percent']}% "
                 f"| {item['per_card_throughput_change_percent']}% |"

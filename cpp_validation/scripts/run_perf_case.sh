@@ -46,6 +46,8 @@ readonly MANUAL_WARMUP_SEED="$((CPP_PERF_SUITE_DEFAULTS[14] + MANUAL_WARMUP_SEED
 readonly CPP_SMOOTH_FACTOR="${CPP_SMOOTH_FACTOR:-${CPP_PERF_SUITE_DEFAULTS[19]}}"
 readonly NEED_TIMING="${CPP_NEED_TIMING:-true}"
 readonly ASYNC_SCHEDULING="${CPP_ASYNC_SCHEDULING:-0}"
+readonly MATRIX_ROUND="${CPP_MATRIX_ROUND:-}"
+readonly MATRIX_POSITION="${CPP_MATRIX_POSITION:-}"
 readonly AISBENCH_AUTO_TOOLS_ROOT="${CPP_AISBENCH_AUTO_TOOLS_ROOT:-${PROJECT_ROOT}/deps/aisbench_auto_tools_prefix}"
 readonly NPU_DEVICES="${CPP_NPU_DEVICES:-8,9,10,11,12,13,14,15}"
 readonly SERVER_PORT="${CPP_PORT:-18080}"
@@ -75,7 +77,22 @@ readonly HCCL_PORT_RANGE="${CPP_HCCL_PORT_RANGE:-17000-17100}"
 readonly CPP_ARTIFACT_ROOT="${CPP_ARTIFACT_ROOT:-${PROJECT_ROOT}/artifacts/cpp}"
 [[ "${ASYNC_SCHEDULING}" == "0" || "${ASYNC_SCHEDULING}" == "1" ]] || \
     cpp_fail "CPP_ASYNC_SCHEDULING must be 0 or 1"
-readonly CASE_ID="${RUNNER}_cpp${DYNAMIC}_${EXECUTION_MODE}_${PERF_DATASET}_${DATA_GENERATOR}_pp${PIPELINE_PARALLEL_SIZE}_tp${TENSOR_PARALLEL_SIZE}"
+[[ -z "${MATRIX_ROUND}" || "${MATRIX_ROUND}" =~ ^[1-9][0-9]*$ ]] || \
+    cpp_fail "CPP_MATRIX_ROUND must be a positive integer"
+[[ -z "${MATRIX_POSITION}" || "${MATRIX_POSITION}" =~ ^[1-9][0-9]*$ ]] || \
+    cpp_fail "CPP_MATRIX_POSITION must be a positive integer"
+if [[ -n "${MATRIX_ROUND}" || -n "${MATRIX_POSITION}" ]]; then
+    [[ -n "${MATRIX_ROUND}" && -n "${MATRIX_POSITION}" ]] || \
+        cpp_fail "CPP_MATRIX_ROUND and CPP_MATRIX_POSITION must be set together"
+fi
+timing_id=0
+[[ "${NEED_TIMING}" == "true" ]] && timing_id=1
+case_round_suffix=""
+if [[ -n "${MATRIX_ROUND}" ]]; then
+    printf -v case_round_suffix '_round%s_seq%02d' \
+        "${MATRIX_ROUND}" "${MATRIX_POSITION}"
+fi
+readonly CASE_ID="${RUNNER}_cpp${DYNAMIC}_${EXECUTION_MODE}_${PERF_DATASET}_${DATA_GENERATOR}_pp${PIPELINE_PARALLEL_SIZE}_tp${TENSOR_PARALLEL_SIZE}_timing${timing_id}_async${ASYNC_SCHEDULING}${case_round_suffix}"
 export CPP_EFFECTIVE_TOKENIZER_TRUST_REMOTE_CODE="${TOKENIZER_TRUST_REMOTE_CODE}"
 
 source "${CPP_ROOT}/scripts/lib/artifacts.sh"

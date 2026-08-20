@@ -244,7 +244,7 @@ cpp_initialize_performance_case() {
         "${MANUAL_WARMUP_DATASET_MODE}" "${MANUAL_WARMUP_SEED}" \
         "${PREFIX_CACHE_ENABLED}" "${PREFIX_REPEAT_RATE}" "${PREFIX_TEST}" \
         "${CPP_SMOOTH_FACTOR}" "${NEED_TIMING}" "${ASYNC_SCHEDULING}" \
-        "${MODEL_ID}" \
+        "${MATRIX_ROUND}" "${MATRIX_POSITION}" "${MODEL_ID}" \
         "${MODEL_FAMILY}" "${TOKENIZER_PATH}" "${TOKENIZER_MODE}" \
         "${TOKENIZER_TRUST_REMOTE_CODE}" "${QUANTIZATION}" \
         "${GPU_MEMORY_UTILIZATION}" "${KV_CACHE_MEMORY}" \
@@ -262,6 +262,7 @@ from pathlib import Path
     manual_warmup_enabled_config, manual_warmup_dataset_mode,
     manual_warmup_seed, prefix_cache_enabled, prefix_repeat_rate,
     prefix_test, smooth_factor, need_timing, async_scheduling,
+    matrix_round, matrix_position,
     model_id, model_family, tokenizer_path, tokenizer_mode,
     tokenizer_trust_remote_code, quantization, gpu_memory_utilization,
     kv_cache_memory, expert_parallel, safetensors_load_strategy,
@@ -328,6 +329,11 @@ data = {
         "need_timing": need_timing == "true",
     },
 }
+if matrix_round:
+    data["matrix"] = {
+        "round": int(matrix_round),
+        "position": int(matrix_position),
+    }
 Path(output).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
 PY
 }
