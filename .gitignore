@@ -11,3 +11,6 @@
 /cpp_validation/**/__pycache__/
 *.log
 *.py[cod]
+
+# Local CI runtime results
+/local_CI/results/
