@@ -282,11 +282,15 @@ def validate_dataset_isolation(
     current_prefix = tokenizer.encode(
         prompts[anchor_index], add_special_tokens=False
     )[:prefix_length]
-    other_prefix = tokenizer.encode(
-        other_prompts[anchor_index], add_special_tokens=False
-    )[:prefix_length]
-    if current_prefix == other_prefix:
-        raise RuntimeError("generated warmup dataset reuses the measurement prefix")
+    for other_prompt in other_prompts:
+        other_ids = tokenizer.encode(other_prompt, add_special_tokens=False)
+        comparison_length = min(prefix_length, len(other_ids))
+        if comparison_length < 32:
+            continue
+        if current_prefix[:comparison_length] == other_ids[:comparison_length]:
+            raise RuntimeError(
+                "generated warmup dataset reuses a measurement prefix"
+            )
 
 
 def repair_aisbench_prompt_lengths(

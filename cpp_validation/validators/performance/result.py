@@ -124,6 +124,8 @@ def validate_case(
     dataset_metadata: Path | None = None,
     manual_warmup: Path | None = None,
     warmup_count: int | None = None,
+    warmup_dataset: str | None = None,
+    warmup_concurrency: int | None = None,
     warmup_dataset_mode: str | None = None,
     warmup_dataset_metadata: Path | None = None,
     prefix_prime: Path | None = None,
@@ -180,6 +182,8 @@ def validate_case(
                 if prefix_metadata.get("prefix_test") is not True:
                     errors.append("variable dataset prefix-test warmup is not enabled")
     manual_warmup_metadata = None
+    warmup_generation = None
+    effective_warmup_dataset = warmup_dataset or dataset
     if manual_warmup is not None:
         if not manual_warmup.is_file():
             errors.append(f"manual warmup metadata is missing: {manual_warmup}")
@@ -189,12 +193,16 @@ def validate_case(
             )
             if manual_warmup_metadata.get("mode") != "warmup":
                 errors.append("manual warmup result has the wrong mode")
-            if manual_warmup_metadata.get("dataset") != dataset:
-                errors.append("manual warmup dataset does not match the measurement")
+            if manual_warmup_metadata.get("dataset") != effective_warmup_dataset:
+                errors.append("manual warmup dataset does not match the case")
             if manual_warmup_metadata.get("dataset_mode") != warmup_dataset_mode:
                 errors.append("manual warmup dataset mode does not match the case")
             if manual_warmup_metadata.get("request_count") != warmup_count:
                 errors.append("manual warmup request count does not match the case")
+            if warmup_concurrency is not None and (
+                manual_warmup_metadata.get("concurrency") != warmup_concurrency
+            ):
+                errors.append("manual warmup concurrency does not match the case")
             records = manual_warmup_metadata.get("records", [])
             if len(records) != warmup_count or any(
                 record.get("completion_tokens") != 1 for record in records
@@ -206,8 +214,34 @@ def validate_case(
             warmup_generation = json.loads(
                 warmup_dataset_metadata.read_text(encoding="utf-8")
             )
-            if warmup_generation.get("input_token_lengths") != expected_lengths:
+            expected_warmup_lengths = performance_input_lengths(
+                effective_warmup_dataset, suite_config
+            )
+            if warmup_generation.get("input_token_lengths") != expected_warmup_lengths:
                 errors.append("manual warmup data violates the target length distribution")
+            expected_warmup_prefix = suite[effective_warmup_dataset].get(
+                "prefix_cache", {}
+            )
+            expected_warmup_prefix_enabled = bool(
+                expected_warmup_prefix.get("enabled", False)
+            )
+            warmup_prefix = warmup_generation.get("prefix_cache", {})
+            if warmup_prefix.get("enabled") is not expected_warmup_prefix_enabled:
+                errors.append("manual warmup prefix-cache mode violates the suite contract")
+            if expected_warmup_prefix_enabled:
+                configured_repeat = str(expected_warmup_prefix.get("repeat_rate", "0"))
+                expected_ratio = (
+                    float(configured_repeat[:-1]) / 100.0
+                    if configured_repeat.endswith("%")
+                    else float(configured_repeat)
+                )
+                if abs(
+                    float(warmup_prefix.get("mean_planned_prefix_hit_ratio", 0.0))
+                    - expected_ratio
+                ) > 1e-4:
+                    errors.append(
+                        "manual warmup planned prefix-hit ratio violates the suite contract"
+                    )
             if warmup_dataset_mode == "generated":
                 if not warmup_generation.get("disjoint_from"):
                     errors.append("generated manual warmup has no isolation evidence")
@@ -391,6 +425,9 @@ def validate_case(
             else None
         ),
         "manual_warmup": manual_warmup_metadata,
+        "manual_warmup_generation_metadata": (
+            warmup_generation
+        ),
         "prefix_prime": prefix_prime_metadata,
         **metrics,
         "input_throughput_per_card_tokens_per_second": round(
@@ -433,6 +470,10 @@ def main() -> int:
     parser.add_argument("--manual-warmup", type=Path)
     parser.add_argument("--warmup-count", type=int)
     parser.add_argument(
+        "--warmup-dataset", choices=("fixed", "variable")
+    )
+    parser.add_argument("--warmup-concurrency", type=int)
+    parser.add_argument(
         "--warmup-dataset-mode", choices=("generated", "reuse")
     )
     parser.add_argument("--warmup-dataset-metadata", type=Path)
@@ -454,6 +495,8 @@ def main() -> int:
         dataset_metadata=args.dataset_metadata,
         manual_warmup=args.manual_warmup,
         warmup_count=args.warmup_count,
+        warmup_dataset=args.warmup_dataset,
+        warmup_concurrency=args.warmup_concurrency,
         warmup_dataset_mode=args.warmup_dataset_mode,
         warmup_dataset_metadata=args.warmup_dataset_metadata,
         prefix_prime=args.prefix_prime,

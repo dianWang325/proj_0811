@@ -144,9 +144,20 @@ length; there is no additional fixed-128K stage or post-warmup rewarm.
 independent dataset with the same length and prefix-cache distribution using a
 different seed, and rejects prompt or shared-prefix overlap with the measured
 dataset. `reuse` is available for diagnostics but intentionally allows the
-measured prompts to be used before timing. `CPP_WARMUP_COUNT` controls the
-single warmup stage. The variable prefix-prime remains separate because it
-establishes the declared measurement cache state rather than warming hardware.
+measured prompts to be used before timing. `CPP_MANUAL_WARMUP_PERF_DATASET`
+can select `fixed` or `variable` independently of the measured dataset; it
+defaults to the measured distribution and requires `generated` mode when the
+two distributions differ. `CPP_MANUAL_WARMUP_CONCURRENCY` defaults to the
+measurement concurrency. Unless `CPP_WARMUP_COUNT` is explicit, fixed warmup
+uses 5 requests and variable warmup uses 30. The variable prefix-prime remains
+separate because it establishes the declared measurement cache state rather
+than warming hardware.
+
+`scripts/run_perf_warmup_distribution_matrix.sh` runs the focused ten-case
+manual-warmup distribution experiment. Set
+`CPP_WARMUP_MATRIX_DRY_RUN=1` to print its deterministic shuffled order without
+starting a server. Its JSON, CSV, and Markdown comparison reports are written
+under the run's `reports/` directory.
 
 The pre-tuning configuration is preserved in
 `configs/snapshots/performance_pre_tuning_20260817.json`; do not overwrite this

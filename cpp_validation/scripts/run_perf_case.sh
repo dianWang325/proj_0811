@@ -27,7 +27,6 @@ readonly GPU_MEMORY_UTILIZATION="${CPP_GPU_MEMORY_UTILIZATION:-0.90}"
 readonly KV_CACHE_MEMORY="${CPP_KV_CACHE_MEMORY:-}"
 readonly ENABLE_EXPERT_PARALLEL="${CPP_ENABLE_EXPERT_PARALLEL:-0}"
 readonly DYNAMIC="${CPP_DYNAMIC:-1}"
-readonly WARMUP_COUNT="${CPP_WARMUP_COUNT:-${CPP_PERF_SUITE_DEFAULTS[0]}}"
 readonly MAX_OUTPUT_TOKENS="${CPP_MAX_OUTPUT_TOKENS:-${CPP_PERF_SUITE_DEFAULTS[1]}}"
 readonly DATA_GENERATOR="${CPP_DATA_GENERATOR:-${CPP_PERF_SUITE_DEFAULTS[15]}}"
 readonly MANUAL_WARMUP_ENABLED_CONFIG="${CPP_PERF_SUITE_DEFAULTS[16]}"
@@ -67,6 +66,16 @@ else
     readonly MAX_NUM_BATCHED_TOKENS="${CPP_MAX_NUM_BATCHED_TOKENS:-${CPP_PERF_SUITE_DEFAULTS[13]}}"
     readonly PREFIX_CACHE_ENABLED="${CPP_PREFIX_CACHE_ENABLED:-${CPP_PERF_SUITE_DEFAULTS[21]}}"
 fi
+readonly MANUAL_WARMUP_PERF_DATASET="${CPP_MANUAL_WARMUP_PERF_DATASET:-${PERF_DATASET}}"
+if [[ "${MANUAL_WARMUP_PERF_DATASET}" == "fixed" ]]; then
+    readonly DEFAULT_WARMUP_COUNT="${CPP_PERF_SUITE_DEFAULTS[3]}"
+    readonly WARMUP_PREFIX_CACHE_ENABLED="${CPP_PERF_SUITE_DEFAULTS[20]}"
+else
+    readonly DEFAULT_WARMUP_COUNT="${CPP_PERF_SUITE_DEFAULTS[0]}"
+    readonly WARMUP_PREFIX_CACHE_ENABLED="${CPP_PERF_SUITE_DEFAULTS[21]}"
+fi
+readonly WARMUP_COUNT="${CPP_WARMUP_COUNT:-${DEFAULT_WARMUP_COUNT}}"
+readonly MANUAL_WARMUP_CONCURRENCY="${CPP_MANUAL_WARMUP_CONCURRENCY:-${CONCURRENCY}}"
 readonly PREFIX_REPEAT_RATE="${CPP_PREFIX_REPEAT_RATE:-${CPP_PERF_SUITE_DEFAULTS[22]}}"
 readonly PREFIX_TEST="${CPP_PREFIX_TEST:-${CPP_PERF_SUITE_DEFAULTS[23]}}"
 readonly API_MODE="${CPP_API_MODE:-${CPP_PERF_SUITE_DEFAULTS[27]}}"
@@ -177,6 +186,11 @@ fi
     cpp_fail "CPP_DATA_GENERATOR must be aisbench or script"
 [[ "${MANUAL_WARMUP_ENABLED}" == "0" || "${MANUAL_WARMUP_ENABLED}" == "1" ]] || \
     cpp_fail "CPP_MANUAL_WARMUP_ENABLED must be 0 or 1"
+[[ "${MANUAL_WARMUP_PERF_DATASET}" == "fixed" || \
+   "${MANUAL_WARMUP_PERF_DATASET}" == "variable" ]] || \
+    cpp_fail "CPP_MANUAL_WARMUP_PERF_DATASET must be fixed or variable"
+[[ "${MANUAL_WARMUP_CONCURRENCY}" =~ ^[1-9][0-9]*$ ]] || \
+    cpp_fail "CPP_MANUAL_WARMUP_CONCURRENCY must be a positive integer"
 [[ "${MANUAL_WARMUP_DATASET_MODE}" == "generated" || \
    "${MANUAL_WARMUP_DATASET_MODE}" == "reuse" ]] || \
     cpp_fail "CPP_MANUAL_WARMUP_DATASET_MODE must be generated or reuse"
@@ -188,6 +202,10 @@ fi
     cpp_fail "CPP_ENABLE_EXPERT_PARALLEL must be 0 or 1"
 if [[ "${MANUAL_WARMUP_ENABLED}" == "1" ]]; then
     [[ "${WARMUP_COUNT}" -gt 0 ]] || cpp_fail "warmup count must be positive"
+    if [[ "${MANUAL_WARMUP_DATASET_MODE}" == "reuse" && \
+          "${MANUAL_WARMUP_PERF_DATASET}" != "${PERF_DATASET}" ]]; then
+        cpp_fail "reuse warmup cannot use a different performance dataset"
+    fi
 fi
 
 if [[ -z "${CPP_RUN_DIR:-}" ]]; then
@@ -210,11 +228,12 @@ dataset_cache="${CPP_RUN_DIR}/datasets/${dataset_stem}.jsonl"
 dataset_metadata_cache="${CPP_RUN_DIR}/datasets/${dataset_stem}.json"
 
 generate_performance_dataset() {
-    local seed="$1" output="$2" metadata="$3" log="$4" disjoint_from="${5:-}"
+    local performance_dataset="$1" prefix_cache_enabled="$2" seed="$3"
+    local output="$4" metadata="$5" log="$6" disjoint_from="${7:-}"
     local -a generation_args=(
         --backend "${DATA_GENERATOR}"
         --model-path "${TOKENIZER_PATH}"
-        --performance-dataset "${PERF_DATASET}"
+        --performance-dataset "${performance_dataset}"
         --suite-config "${SUITE_CONFIG}"
         --output-tokens "${MAX_OUTPUT_TOKENS}"
         --seed "${seed}"
@@ -223,7 +242,7 @@ generate_performance_dataset() {
         --metadata-output "${metadata}"
     )
     [[ -z "${disjoint_from}" ]] || generation_args+=(--disjoint-from "${disjoint_from}")
-    if [[ "${PREFIX_CACHE_ENABLED}" == "1" ]]; then
+    if [[ "${prefix_cache_enabled}" == "1" ]]; then
         generation_args+=(--prefix-repeat-rate "${PREFIX_REPEAT_RATE}")
         [[ "${PREFIX_TEST}" == "1" ]] && generation_args+=(--prefix-test)
     fi
@@ -232,7 +251,8 @@ generate_performance_dataset() {
 }
 
 if [[ ! -f "${dataset_cache}" || ! -f "${dataset_metadata_cache}" ]]; then
-    generate_performance_dataset "${CPP_PERF_SUITE_DEFAULTS[14]}" \
+    generate_performance_dataset "${PERF_DATASET}" "${PREFIX_CACHE_ENABLED}" \
+        "${CPP_PERF_SUITE_DEFAULTS[14]}" \
         "${dataset_cache}" "${dataset_metadata_cache}" "dataset_generation.log"
 else
     echo "CPP_DATASET_REUSED backend=${DATA_GENERATOR} dataset=${PERF_DATASET} source=${dataset_cache}" \
@@ -245,11 +265,13 @@ warmup_dataset_path="${case_dir}/raw/dataset.jsonl"
 warmup_dataset_metadata="${case_dir}/raw/dataset_metadata.json"
 if [[ "${MANUAL_WARMUP_ENABLED}" == "1" && \
       "${MANUAL_WARMUP_DATASET_MODE}" == "generated" ]]; then
-    warmup_stem="${PERF_DATASET}_${DATA_GENERATOR}_${dataset_variant}_warmup_seed${MANUAL_WARMUP_SEED}"
+    warmup_variant="prefix${WARMUP_PREFIX_CACHE_ENABLED}_${PREFIX_REPEAT_RATE//%/pct}"
+    warmup_stem="${MANUAL_WARMUP_PERF_DATASET}_${DATA_GENERATOR}_${warmup_variant}_warmup_seed${MANUAL_WARMUP_SEED}_disjoint_${PERF_DATASET}"
     warmup_cache="${CPP_RUN_DIR}/datasets/${warmup_stem}.jsonl"
     warmup_metadata_cache="${CPP_RUN_DIR}/datasets/${warmup_stem}.json"
     if [[ ! -f "${warmup_cache}" || ! -f "${warmup_metadata_cache}" ]]; then
-        generate_performance_dataset "${MANUAL_WARMUP_SEED}" \
+        generate_performance_dataset "${MANUAL_WARMUP_PERF_DATASET}" \
+            "${WARMUP_PREFIX_CACHE_ENABLED}" "${MANUAL_WARMUP_SEED}" \
             "${warmup_cache}" "${warmup_metadata_cache}" \
             "warmup_dataset_generation.log" "${dataset_cache}"
     else
@@ -278,12 +300,12 @@ run_distribution_warmup() {
     python3 "${CPP_ROOT}/workloads/performance/prepare.py" \
         --mode warmup \
         --dataset-mode "${MANUAL_WARMUP_DATASET_MODE}" \
-        --dataset "${PERF_DATASET}" \
+        --dataset "${MANUAL_WARMUP_PERF_DATASET}" \
         --model-path "${TOKENIZER_PATH}" \
         --model-name "${MODEL_NAME}" \
         --port "${SERVER_PORT}" \
         --count "${count}" \
-        --concurrency "${CONCURRENCY}" \
+        --concurrency "${MANUAL_WARMUP_CONCURRENCY}" \
         --timeout "${REQUEST_TIMEOUT}" \
         --dataset-path "${dataset_path}" \
         --dataset-metadata "${dataset_metadata}" \
@@ -366,6 +388,8 @@ if [[ "${MANUAL_WARMUP_ENABLED}" == "1" ]]; then
     validator_args+=(
         --manual-warmup "${case_dir}/raw/manual_warmup.json"
         --warmup-count "${WARMUP_COUNT}"
+        --warmup-dataset "${MANUAL_WARMUP_PERF_DATASET}"
+        --warmup-concurrency "${MANUAL_WARMUP_CONCURRENCY}"
         --warmup-dataset-mode "${MANUAL_WARMUP_DATASET_MODE}"
         --warmup-dataset-metadata "${warmup_dataset_metadata}"
     )

@@ -241,7 +241,8 @@ cpp_initialize_performance_case() {
         "${REQUEST_COUNT}" "${WARMUP_COUNT}" "${CONCURRENCY}" \
         "${REQUEST_RATE}" "${MAX_OUTPUT_TOKENS}" "${DATA_GENERATOR}" \
         "${MANUAL_WARMUP_ENABLED}" "${MANUAL_WARMUP_ENABLED_CONFIG}" \
-        "${MANUAL_WARMUP_DATASET_MODE}" "${MANUAL_WARMUP_SEED}" \
+        "${MANUAL_WARMUP_DATASET_MODE}" "${MANUAL_WARMUP_PERF_DATASET}" \
+        "${MANUAL_WARMUP_CONCURRENCY}" "${MANUAL_WARMUP_SEED}" \
         "${PREFIX_CACHE_ENABLED}" "${PREFIX_REPEAT_RATE}" "${PREFIX_TEST}" \
         "${CPP_SMOOTH_FACTOR}" "${NEED_TIMING}" "${ASYNC_SCHEDULING}" \
         "${MATRIX_ROUND}" "${MATRIX_POSITION}" "${MODEL_ID}" \
@@ -260,7 +261,8 @@ from pathlib import Path
     max_num_batched_tokens, request_count, warmup_count, concurrency,
     request_rate, max_output_tokens, data_generator, manual_warmup_enabled,
     manual_warmup_enabled_config, manual_warmup_dataset_mode,
-    manual_warmup_seed, prefix_cache_enabled, prefix_repeat_rate,
+    manual_warmup_dataset, manual_warmup_concurrency, manual_warmup_seed,
+    prefix_cache_enabled, prefix_repeat_rate,
     prefix_test, smooth_factor, need_timing, async_scheduling,
     matrix_round, matrix_position,
     model_id, model_family, tokenizer_path, tokenizer_mode,
@@ -312,10 +314,10 @@ data = {
         "enabled": manual_warmup_enabled == "1",
         "configured_enabled": manual_warmup_enabled_config,
         "dataset_mode": manual_warmup_dataset_mode,
-        "dataset": dataset,
+        "dataset": manual_warmup_dataset,
         "seed": int(manual_warmup_seed),
         "request_count": int(warmup_count),
-        "concurrency": int(concurrency),
+        "concurrency": int(manual_warmup_concurrency),
         "request_rate": float(request_rate),
         "output_tokens": int(max_output_tokens),
     },
