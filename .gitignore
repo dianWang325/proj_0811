@@ -21,3 +21,6 @@
 /accuracy_test/reports/generated/
 /accuracy_test/state/
 /accuracy_test/tmp/
+
+# Server-local model weight mounts
+/local_weight_mount/
