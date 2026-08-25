@@ -41,7 +41,7 @@ runner_v2=0
 [[ "${ACCURACY_RUNNER}" == "mrv2" ]] && runner_v2=1
 additional_config='{"enable_cpu_binding":false}'
 if [[ "${ACCURACY_CPP_ENABLED}" == "1" ]]; then
-    additional_config="{\"enable_cpu_binding\":false,\"scheduler_config\":{\"profiling_chunk_config\":{\"enabled\":true,\"need_timing\":${ACCURACY_CPP_NEED_TIMING},\"execution_mode_trace_enabled\":true,\"smooth_factor\":${ACCURACY_CPP_SMOOTH_FACTOR}}}}"
+    additional_config="{\"enable_cpu_binding\":false,\"scheduler_config\":{\"profiling_chunk_config\":{\"enabled\":true,\"need_timing\":${ACCURACY_CPP_NEED_TIMING},\"smooth_factor\":${ACCURACY_CPP_SMOOTH_FACTOR}}}}"
 fi
 
 command=(

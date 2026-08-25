@@ -7,7 +7,7 @@
 
 ## 固定测试范围
 
-- 模型：`/mnt/weight`
+- 模型：`/mnt/weight/DeepSeek-V4-Flash-w4a8`
 - 服务名：`deepseek-v4-flash`
 - 量化：Ascend W4A8
 - 卡数：8张物理 NPU，默认 `8,9,10,11,12,13,14,15`
@@ -51,7 +51,7 @@ docker exec -it -w /home/w00985415/proj_0811/accuracy_test wd_test0811 bash
 当前已知容器曾存在 NumPy 2.3.5 与 SciPy 1.13.1 不兼容的问题，AISBench 运行前
 NumPy 必须调整为 `<2.3`。脚本不会代为调整。
 
-模型目录在当前容器中配置为 `/mnt/weight`。如果该挂载不可访问，环境检查会在15秒后失败；
+模型目录在当前容器中配置为 `/mnt/weight/DeepSeek-V4-Flash-w4a8`。如果该挂载不可访问，环境检查会在15秒后失败；
 应先修复挂载，不能静默换用备用权重。确实需要显式改用另一份模型时，可导出：
 
 ~~~bash

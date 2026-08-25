@@ -19,7 +19,10 @@ models = [
         attr="service",
         type=VLLMCustomAPIChat,
         abbr="deepseek-v4-flash-accuracy",
-        path=os.environ.get("ACCURACY_TOKENIZER_PATH", ""),
+        path=os.environ.get(
+            "ACCURACY_TOKENIZER_PATH",
+            "/mnt/weight/DeepSeek-V4-Flash-w4a8",
+        ),
         model=os.environ.get("ACCURACY_SERVED_MODEL_NAME", "deepseek-v4-flash"),
         stream=False,
         request_rate=_env_float("ACCURACY_REQUEST_RATE", 0),

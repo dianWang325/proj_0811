@@ -98,6 +98,7 @@ mkdir -p "${result_dir}"
 export ACCURACY_TOKENIZER_PATH ACCURACY_SERVED_MODEL_NAME
 export ACCURACY_HOST ACCURACY_PORT ACCURACY_MAX_OUT_LEN ACCURACY_BATCH_SIZE
 export ACCURACY_REQUEST_RATE ACCURACY_TEMPERATURE ACCURACY_REPETITION_PENALTY
+export AIS_BENCH_DATASETS_CACHE="${PROJECT_ROOT}/predict"
 
 command=(
     ais_bench
@@ -121,6 +122,40 @@ set +e
 "${command[@]}" 2>&1 | tee -a "${benchmark_log}"
 status=${PIPESTATUS[0]}
 set -e
+
+if [[ "${status}" -eq 0 ]]; then
+    if ! python - "${result_dir}" "${#tasks[@]}" <<'PY'
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+expected_tasks = int(sys.argv[2])
+failed_logs = []
+for path in root.rglob("*.out"):
+    relative = path.relative_to(root).as_posix()
+    if "/logs/infer/" not in f"/{relative}" and "/logs/eval/" not in f"/{relative}":
+        continue
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if "Traceback (most recent call last)" in text or "UNKNOWN applicaiton exception" in text:
+        failed_logs.append(path)
+
+predictions = list(root.rglob("predictions/**/*.json"))
+predictions.extend(root.rglob("predictions/**/*.jsonl"))
+evaluated = list(root.rglob("results/**/*.json"))
+if failed_logs or len(predictions) < expected_tasks or len(evaluated) < expected_tasks:
+    for path in failed_logs:
+        print(f"AISBENCH_TASK_FAILED {path}", file=sys.stderr)
+    print(
+        f"AISBENCH_OUTPUT_INCOMPLETE predictions={len(predictions)} "
+        f"evaluated={len(evaluated)} expected_tasks={expected_tasks}",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY
+    then
+        status=1
+    fi
+fi
 printf 'EXIT_CODE=%s\n' "${status}" >>"${environment_log}"
 
 if [[ "${status}" -eq 0 ]]; then

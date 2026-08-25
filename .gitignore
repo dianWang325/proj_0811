@@ -14,3 +14,10 @@
 
 # Local CI runtime results
 /local_CI/results/
+
+# Accuracy-test runtime artifacts
+/accuracy_test/logs/
+/accuracy_test/results/
+/accuracy_test/reports/generated/
+/accuracy_test/state/
+/accuracy_test/tmp/
