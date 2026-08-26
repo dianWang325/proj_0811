@@ -16,7 +16,8 @@
   - `gsm8k_gen_0_shot_cot_chat_prompt`
   - `gpqa_gen_0_shot_cot_chat_prompt`
 
-默认使用 8192 token 上下文、4096 token 最大输出和4并发，适用于当前两个精度数据集。
+默认使用 32768 token 上下文、30000 token 最大输出和16并发，并开启 Prefix Cache 与
+`FULL_DECODE_ONLY` ACL Graph。该配置用于验证更长思考链能否减少最终答案被截断的问题。
 这些参数可通过环境变量覆盖，但模型路径、数据集版本和生成参数在对比实验中必须保持一致。
 
 ## 1. 进入工作容器
@@ -109,6 +110,22 @@ CPP 与 Model Runner 是两个独立开关。支持以下四种组合：
 
 ## 5. 正式测试
 
+首次验证优化配置时，建议先运行 CPP 开启的 GPQA 前32条：
+
+~~~bash
+export ACCURACY_NPU_DEVICES=0,1,2,3,4,5,6,7
+./scripts/10_start_service.sh --runner mrv2 --cpp on
+./scripts/11_check_service.sh --wait 3600 --probe
+./scripts/30_run_accuracy.sh \
+  --dataset gpqa \
+  --num-prompts 32 \
+  --run-id mrv2_cpp_on_gpqa_n32_out30k_b16_graph
+~~~
+
+`max-num-seqs=16` 是调度上限。若多条请求同时接近30000 token，KV cache可能不足以维持
+16路常驻，服务可能降低有效并发或发生重计算；运行时应关注服务日志中的 preemption、
+Running/Waiting 和 KV cache 指标。
+
 运行前100条：
 
 ~~~bash
@@ -165,9 +182,14 @@ tmp/compiler/       vLLM 编译器临时产物
 ~~~bash
 export ACCURACY_PORT=18081
 export ACCURACY_NPU_DEVICES=0,1,2,3,4,5,6,7
-export ACCURACY_MAX_MODEL_LEN=8192
-export ACCURACY_MAX_OUT_LEN=4096
-export ACCURACY_BATCH_SIZE=4
+export ACCURACY_MAX_MODEL_LEN=32768
+export ACCURACY_MAX_OUT_LEN=30000
+export ACCURACY_BATCH_SIZE=16
+export ACCURACY_MAX_NUM_SEQS=16
+export ACCURACY_ENABLE_PREFIX_CACHING=1
+export ACCURACY_GRAPH_MODE=FULL_DECODE_ONLY
+export ACCURACY_CUDAGRAPH_CAPTURE_SIZES=1,2,4,8,16
+export ACCURACY_MAX_CUDAGRAPH_CAPTURE_SIZE=16
 ~~~
 
 使用不同卡号前必须确认8张卡均属于当前任务，且没有其他服务占用。

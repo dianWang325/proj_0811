@@ -43,6 +43,12 @@ done
 
 [[ "${dataset}" == "all" || "${dataset}" == "gsm8k" || "${dataset}" == "gpqa" ]] || \
     accuracy_fail "dataset must be one of: all, gsm8k, gpqa"
+[[ "${ACCURACY_MAX_OUT_LEN}" =~ ^[1-9][0-9]*$ ]] || \
+    accuracy_fail "ACCURACY_MAX_OUT_LEN must be a positive integer"
+[[ "${ACCURACY_BATCH_SIZE}" =~ ^[1-9][0-9]*$ ]] || \
+    accuracy_fail "ACCURACY_BATCH_SIZE must be a positive integer"
+((ACCURACY_MAX_OUT_LEN < ACCURACY_MAX_MODEL_LEN)) || \
+    accuracy_fail "ACCURACY_MAX_OUT_LEN must be smaller than ACCURACY_MAX_MODEL_LEN"
 accuracy_require_command ais_bench
 accuracy_require_command python
 "${ACCURACY_ROOT}/scripts/01_check_datasets.sh" "${dataset}"
@@ -89,6 +95,10 @@ mkdir -p "${result_dir}"
     printf 'DATASET_TASKS=%q\n' "${tasks[*]}"
     printf 'NUM_PROMPTS=%q\n' "${num_prompts:-full}"
     printf 'DEBUG=%q\n' "${debug}"
+    printf 'ACCURACY_MAX_OUT_LEN=%q\n' "${ACCURACY_MAX_OUT_LEN}"
+    printf 'ACCURACY_BATCH_SIZE=%q\n' "${ACCURACY_BATCH_SIZE}"
+    printf 'ACCURACY_TEMPERATURE=%q\n' "${ACCURACY_TEMPERATURE}"
+    printf 'ACCURACY_REPETITION_PENALTY=%q\n' "${ACCURACY_REPETITION_PENALTY}"
     printf 'STARTED_AT=%q\n' "$(date --iso-8601=seconds)"
     cat "${state_file}"
     python --version 2>&1 | sed 's/^/PYTHON_VERSION=/'

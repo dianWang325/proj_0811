@@ -31,8 +31,27 @@ done
 
 accuracy_validate_bool ACCURACY_CPP_ENABLED "${ACCURACY_CPP_ENABLED}"
 accuracy_validate_bool ACCURACY_ENABLE_EXPERT_PARALLEL "${ACCURACY_ENABLE_EXPERT_PARALLEL}"
+accuracy_validate_bool ACCURACY_ENABLE_PREFIX_CACHING "${ACCURACY_ENABLE_PREFIX_CACHING}"
 accuracy_validate_runner "${ACCURACY_RUNNER}"
 accuracy_validate_topology
+for variable_name in \
+    ACCURACY_MAX_MODEL_LEN \
+    ACCURACY_MAX_NUM_BATCHED_TOKENS \
+    ACCURACY_MAX_NUM_SEQS \
+    ACCURACY_MAX_OUT_LEN \
+    ACCURACY_MAX_CUDAGRAPH_CAPTURE_SIZE; do
+    variable_value="${!variable_name}"
+    [[ "${variable_value}" =~ ^[1-9][0-9]*$ ]] || \
+        accuracy_fail "${variable_name} must be a positive integer"
+done
+((ACCURACY_MAX_OUT_LEN < ACCURACY_MAX_MODEL_LEN)) || \
+    accuracy_fail "ACCURACY_MAX_OUT_LEN must be smaller than ACCURACY_MAX_MODEL_LEN"
+case "${ACCURACY_GRAPH_MODE}" in
+    NONE|FULL_DECODE_ONLY) ;;
+    *) accuracy_fail "ACCURACY_GRAPH_MODE must be NONE or FULL_DECODE_ONLY" ;;
+esac
+[[ "${ACCURACY_CUDAGRAPH_CAPTURE_SIZES}" =~ ^[1-9][0-9]*(,[1-9][0-9]*)*$ ]] || \
+    accuracy_fail "ACCURACY_CUDAGRAPH_CAPTURE_SIZES must be a comma-separated integer list"
 for command_name in python vllm npu-smi nohup setsid timeout stat; do
     accuracy_require_command "${command_name}"
 done
@@ -56,16 +75,25 @@ command=(
     --max-num-seqs "${ACCURACY_MAX_NUM_SEQS}"
     --gpu-memory-utilization "${ACCURACY_GPU_MEMORY_UTILIZATION}"
     --enable-chunked-prefill
-    --no-enable-prefix-caching
     --no-async-scheduling
     --tokenizer-mode "${ACCURACY_TOKENIZER_MODE}"
     --tokenizer "${ACCURACY_TOKENIZER_PATH}"
     --trust-remote-code
     --quantization "${ACCURACY_QUANTIZATION}"
     --block-size 32
-    --enforce-eager
     --additional-config "${additional_config}"
 )
+if [[ "${ACCURACY_ENABLE_PREFIX_CACHING}" == "1" ]]; then
+    command+=(--enable-prefix-caching)
+else
+    command+=(--no-enable-prefix-caching)
+fi
+if [[ "${ACCURACY_GRAPH_MODE}" == "NONE" ]]; then
+    command+=(--enforce-eager)
+else
+    compilation_config="{\"cudagraph_mode\":\"${ACCURACY_GRAPH_MODE}\",\"cudagraph_capture_sizes\":[${ACCURACY_CUDAGRAPH_CAPTURE_SIZES}],\"max_cudagraph_capture_size\":${ACCURACY_MAX_CUDAGRAPH_CAPTURE_SIZE}}"
+    command+=(--compilation-config "${compilation_config}")
+fi
 if [[ "${ACCURACY_ENABLE_EXPERT_PARALLEL}" == "1" ]]; then
     command+=(--enable-expert-parallel)
 fi
@@ -137,6 +165,13 @@ printf '%s\n' "${server_pid}" >"${pid_file}"
     printf 'ACCURACY_PORT=%q\n' "${ACCURACY_PORT}"
     printf 'ACCURACY_PIPELINE_PARALLEL_SIZE=%q\n' "${ACCURACY_PIPELINE_PARALLEL_SIZE}"
     printf 'ACCURACY_TENSOR_PARALLEL_SIZE=%q\n' "${ACCURACY_TENSOR_PARALLEL_SIZE}"
+    printf 'ACCURACY_MAX_MODEL_LEN=%q\n' "${ACCURACY_MAX_MODEL_LEN}"
+    printf 'ACCURACY_MAX_NUM_BATCHED_TOKENS=%q\n' "${ACCURACY_MAX_NUM_BATCHED_TOKENS}"
+    printf 'ACCURACY_MAX_NUM_SEQS=%q\n' "${ACCURACY_MAX_NUM_SEQS}"
+    printf 'ACCURACY_ENABLE_PREFIX_CACHING=%q\n' "${ACCURACY_ENABLE_PREFIX_CACHING}"
+    printf 'ACCURACY_GRAPH_MODE=%q\n' "${ACCURACY_GRAPH_MODE}"
+    printf 'ACCURACY_CUDAGRAPH_CAPTURE_SIZES=%q\n' "${ACCURACY_CUDAGRAPH_CAPTURE_SIZES}"
+    printf 'ACCURACY_MAX_CUDAGRAPH_CAPTURE_SIZE=%q\n' "${ACCURACY_MAX_CUDAGRAPH_CAPTURE_SIZE}"
     printf 'ACCURACY_SERVICE_STARTED_AT=%q\n' "$(date --iso-8601=seconds)"
 } | tee "${state_file}" >"${environment_file}"
 
