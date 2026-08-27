@@ -99,6 +99,14 @@ mkdir -p "${result_dir}"
     printf 'ACCURACY_BATCH_SIZE=%q\n' "${ACCURACY_BATCH_SIZE}"
     printf 'ACCURACY_TEMPERATURE=%q\n' "${ACCURACY_TEMPERATURE}"
     printf 'ACCURACY_REPETITION_PENALTY=%q\n' "${ACCURACY_REPETITION_PENALTY}"
+    printf 'FORMAL_AISBENCH_NUM_WARMUPS=0\n'
+    printf 'MANUAL_WARMUP_REQUIRED=%q\n' "${ACCURACY_CPP_ENABLED}"
+    printf 'ACCURACY_MANUAL_WARMUP_INPUT_LEN=%q\n' "${ACCURACY_MANUAL_WARMUP_INPUT_LEN}"
+    printf 'ACCURACY_MANUAL_WARMUP_OUTPUT_LEN=%q\n' "${ACCURACY_MANUAL_WARMUP_OUTPUT_LEN}"
+    printf 'ACCURACY_MANUAL_WARMUP_REQUESTS=%q\n' "${ACCURACY_MANUAL_WARMUP_REQUESTS}"
+    printf 'ACCURACY_MANUAL_WARMUP_CONCURRENCY=%q\n' "${ACCURACY_MANUAL_WARMUP_CONCURRENCY}"
+    printf 'ACCURACY_MANUAL_WARMUP_SEED=%q\n' "${ACCURACY_MANUAL_WARMUP_SEED}"
+    printf 'ACCURACY_MANUAL_WARMUP_TIMEOUT=%q\n' "${ACCURACY_MANUAL_WARMUP_TIMEOUT}"
     printf 'STARTED_AT=%q\n' "$(date --iso-8601=seconds)"
     cat "${state_file}"
     python --version 2>&1 | sed 's/^/PYTHON_VERSION=/'
@@ -110,6 +118,18 @@ export ACCURACY_HOST ACCURACY_PORT ACCURACY_MAX_OUT_LEN ACCURACY_BATCH_SIZE
 export ACCURACY_REQUEST_RATE ACCURACY_TEMPERATURE ACCURACY_REPETITION_PENALTY
 export AIS_BENCH_DATASETS_CACHE="${PROJECT_ROOT}/predict"
 
+manual_warmup_status=0
+if [[ "${ACCURACY_CPP_ENABLED}" == "1" ]]; then
+    "${ACCURACY_ROOT}/scripts/25_manual_warmup.sh" \
+        --run-id "${run_id}" \
+        --result-dir "${result_dir}" || manual_warmup_status=$?
+fi
+printf 'MANUAL_WARMUP_EXIT_CODE=%s\n' "${manual_warmup_status}" >>"${environment_log}"
+if [[ "${manual_warmup_status}" -ne 0 ]]; then
+    printf 'EXIT_CODE=%s\n' "${manual_warmup_status}" >>"${environment_log}"
+    accuracy_fail "manual CPP warmup failed; formal accuracy run was not started"
+fi
+
 command=(
     ais_bench
     --config-dir "${ACCURACY_ROOT}/configs/aisbench"
@@ -117,7 +137,7 @@ command=(
     --datasets "${tasks[@]}"
     --summarizer example
     --dump-eval-details
-    --num-warmups 1
+    --num-warmups 0
     --work-dir "${result_dir}"
 )
 [[ -z "${num_prompts}" ]] || command+=(--num-prompts "${num_prompts}")

@@ -148,6 +148,33 @@ Running/Waiting 和 KV cache 指标。
 
 脚本始终添加 `--dump-eval-details`，便于区分模型答错、答案抽取失败和请求失败。
 
+### CPP 手动预热
+
+当当前服务状态中的 `ACCURACY_CPP_ENABLED=1` 时，`30_run_accuracy.sh` 会在正式
+计分前调用 `25_manual_warmup.sh`。该脚本复用性能测试的两阶段预热链路：先由 AISBench
+数据工具生成并校验定长数据，再向 `/v1/completions` 发送手动预热请求。默认生成并发送
+5个 `30000 input token + 1 output token` 的请求（并发1），并逐请求核验服务返回的
+prompt/completion token。任何生成、请求或校验失败都会终止本轮，正式精度任务不会启动。
+
+CPP off 不执行这一步。正式 CPP on/off 测试均固定传递 `--num-warmups 0`，避免把
+AISBench 内置 warmup 混入正式精度结果。预热日志位于 `logs/warmup/<run-id>.log`，
+元数据和隔离的 AISBench 工作目录位于
+`results/<run-id>/manual_warmup/`。
+
+默认值可在启动正式测试前覆盖：
+
+~~~bash
+export ACCURACY_MANUAL_WARMUP_INPUT_LEN=30000
+export ACCURACY_MANUAL_WARMUP_OUTPUT_LEN=1
+export ACCURACY_MANUAL_WARMUP_REQUESTS=5
+export ACCURACY_MANUAL_WARMUP_CONCURRENCY=1
+export ACCURACY_MANUAL_WARMUP_SEED=812
+export ACCURACY_MANUAL_WARMUP_TIMEOUT=7200
+~~~
+
+输入长度与输出长度之和不得超过 `ACCURACY_MAX_MODEL_LEN`。对比实验中必须固定这些
+预热参数；生成数据与正式 GSM8K/GPQA 数据彼此独立，不复用正式题目。
+
 ## 6. 停止服务
 
 ~~~bash
@@ -162,6 +189,7 @@ Running/Waiting 和 KV cache 指标。
 ~~~text
 logs/service/       vLLM 服务日志
 logs/benchmark/     AISBench 控制台日志
+logs/warmup/        CPP on 定长手动预热日志
 logs/environment/   每次服务和测试的参数、版本记录
 results/<run-id>/   AISBench predictions、results 和 summary
 reports/generated/  自动生成的 Markdown 报告

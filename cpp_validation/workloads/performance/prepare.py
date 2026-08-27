@@ -133,9 +133,11 @@ def main() -> int:
     parser.add_argument("--dataset", choices=("fixed", "variable"), required=True)
     parser.add_argument("--model-path", required=True)
     parser.add_argument("--model-name", required=True)
+    parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--count", type=int, default=30)
     parser.add_argument("--concurrency", type=int, default=1)
+    parser.add_argument("--output-tokens", type=int, default=1)
     parser.add_argument("--timeout", type=int, default=3600)
     parser.add_argument("--server-log", type=Path)
     parser.add_argument("--dataset-path", type=Path)
@@ -187,6 +189,8 @@ def main() -> int:
     else:
         if args.count <= 0:
             parser.error("--count must be positive")
+        if args.output_tokens <= 0:
+            parser.error("--output-tokens must be positive")
         if args.dataset_path:
             generated = load_generated_records(args.dataset_path)
             source_samples = [
@@ -204,7 +208,7 @@ def main() -> int:
             source_samples[index % len(source_samples)] for index in range(args.count)
         ]
         concurrency = args.concurrency
-        output_tokens = 1
+        output_tokens = args.output_tokens
 
     server_log_offset = (
         args.server_log.stat().st_size if args.mode == "graph-probe" else None
@@ -212,7 +216,7 @@ def main() -> int:
     records = run_requests(
         samples=samples,
         concurrency=concurrency,
-        base_url=f"http://127.0.0.1:{args.port}",
+        base_url=f"http://{args.host}:{args.port}",
         model_name=args.model_name,
         output_tokens=output_tokens,
         timeout=args.timeout,
